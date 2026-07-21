@@ -143,11 +143,11 @@ Codex 回答の実抜粋（UTF-8 で 554 文字。全文はローカルの `.las
 .\scripts\verify-job.ps1 -JobId walkthrough-001
 ```
 
-実出力（パスはスクラブ済み）:
+**クリーンな working tree** 上での実出力（パスはスクラブ済み。2026-07-21 にコミット後に再採取 — 件数は手編集しない）:
 
 ```text
 [PASS] status:log: non-empty: <repo>\.agents\logs\codex\walkthrough-001.last.txt
-[PASS] diff:scope: owned_paths not set; 1 changed path(s) observed
+[PASS] diff:scope: owned_paths not set; 0 changed path(s) observed
 [PASS] stub: no stub markers in added lines
 [PASS] f07:tests: no test deletion or skip markers detected
 verify-job: PASS
@@ -155,8 +155,15 @@ verify-job: PASS
 
 終了コード: **0**。
 
-Codex ログ無しの Grok 直接実装では `-SkipLog` を使います。書き込みリース時は `-OwnedPaths` でスコープ逸脱を fail-closed にします。
+`verify-job.ps1` は必要だが **十分条件ではない**。ルート [AGENTS.md](../AGENTS.md) の **Done means** は、オペレーターが手動で締めくくることを要求します:
 
+- [ ] packet の **Acceptance checks**（`## Acceptance checks` 下のコマンド／条件）を再実行する
+- [ ] **diff** を確認する（`git status` / `git diff` — 想定外ファイルやスコープ逸脱がないか）
+- [ ] 非自明な変更では Codex の **`review`** packet を通し、指摘を折り込んでから done にする
+
+（`.agents/skills/verify-job/SKILL.md` も参照 — スクリプト出力は checklist の証跡であり、checklist の代替ではない。）
+
+Codex ログ無しの Grok 直接実装では `-SkipLog` を使います。書き込みリース時は `-OwnedPaths` でスコープ逸脱を fail-closed にします。
 ## 5. 次の一歩: 自分のプロジェクトへ
 
 ハーネスを別アプリに敷く（Plan 003）:

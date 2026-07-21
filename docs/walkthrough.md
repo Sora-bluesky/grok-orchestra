@@ -143,17 +143,25 @@ Worker prose is never done by itself. Run the mechanical gate:
 .\scripts\verify-job.ps1 -JobId walkthrough-001
 ```
 
-Actual output (paths scrubbed):
+Actual output from a **clean working tree** (paths scrubbed; recaptured 2026-07-21 after commit — do not hand-edit counts):
 
 ```text
 [PASS] status:log: non-empty: <repo>\.agents\logs\codex\walkthrough-001.last.txt
-[PASS] diff:scope: owned_paths not set; 1 changed path(s) observed
+[PASS] diff:scope: owned_paths not set; 0 changed path(s) observed
 [PASS] stub: no stub markers in added lines
 [PASS] f07:tests: no test deletion or skip markers detected
 verify-job: PASS
 ```
 
 Exit code: **0**.
+
+`verify-job.ps1` is necessary but **not sufficient**. Root [AGENTS.md](../AGENTS.md) **Done means** still requires the Operator to finish the job by hand:
+
+- [ ] Re-run the packet’s **Acceptance checks** (commands or assertions under `## Acceptance checks`)
+- [ ] Inspect the **diff** (`git status` / `git diff`) for unexpected files or scope escape
+- [ ] For non-trivial changes, land a Codex **`review`** packet and fold findings before calling done
+
+(See also `.agents/skills/verify-job/SKILL.md` — script output is evidence for the checklist, not a replacement for it.)
 
 For Grok-direct edits without a Codex log, use `-SkipLog`. For write leases, pass `-OwnedPaths` so scope escapes fail closed.
 
