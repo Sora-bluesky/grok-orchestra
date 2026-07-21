@@ -114,4 +114,11 @@ Describe 'install.ps1' {
     # Source smoke must not have been bulk-copied as the only content
     $smoke | Should -Not -Match 'fixtures/sample.txt for clarity for a new contributor to grok-orchestra'
   }
+
+  It 'does not copy dogfooding plan-*.prompt.txt packets' {
+    & $script:InstallScript -Target $script:Target | Out-Null
+    $packets = Join-Path $script:Target '.agents\docs\packets'
+    (Test-Path -LiteralPath (Join-Path $packets 'smoke-001.prompt.txt')) | Should -BeTrue
+    @(Get-ChildItem -LiteralPath $packets -Filter 'plan-*.prompt.txt' -ErrorAction SilentlyContinue).Count | Should -Be 0
+  }
 }

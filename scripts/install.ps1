@@ -119,6 +119,8 @@ function Test-ShouldExcludeAgentsPath {
 
   if ($norm -eq '.agents/STATE.md' -or $norm -eq 'agents/STATE.md') { return $true }
   if ($norm -eq '.agents/docs/packets/smoke-001.prompt.txt') { return $true }
+  # Dogfooding / plan review packets from this repo — not for target apps
+  if ($norm -match '^\.agents/docs/packets/plan-.*\.prompt\.txt$') { return $true }
   # Live / local-only runtime trees (never ship into another app)
   if ($norm -match '^\.agents/worktrees(/|$)') { return $true }
 
