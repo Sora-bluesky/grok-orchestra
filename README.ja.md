@@ -4,6 +4,8 @@
 
 **Grok = オペレーター · Codex CLI = 専門ワーカー**
 
+現行リリース: **[v0.1.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.1.0)** · [Changelog](CHANGELOG.md)
+
 マルチエージェント開発ハーネスです。話す相手は **Grok だけ**。**Codex** は設計・独立レビュー・原因調査を既定で担当します。**実装の既定は Grok**、完了判定（verify）も Grok です。
 
 [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を参照しています。
