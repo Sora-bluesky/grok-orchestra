@@ -88,4 +88,24 @@ Describe 'verify-job.ps1' {
     $LASTEXITCODE | Should -Be 1
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'outside owned_paths'
   }
+
+  It 'resolves BaseRef HEAD to a full 40-char SHA' {
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -BaseRef 'HEAD' *>&1
+    $LASTEXITCODE | Should -Be 0
+    $text = ($output | ForEach-Object { "$_" } | Out-String)
+    $text | Should -Match 'git:baseref: resolved to [0-9a-fA-F]{40}'
+    if ($text -match 'resolved to ([0-9a-fA-F]+)') {
+      $Matches[1].Length | Should -Be 40
+    }
+    else {
+      throw 'resolved SHA not found in verify-job output'
+    }
+  }
+
+  It 'fails on untracked test file containing it.skip' {
+    Set-Content -LiteralPath (Join-Path $script:Repo 'tests\New.Tests.ps1') -Value "it.skip('pending', () => {})" -Encoding UTF8
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'f07:tests'
+  }
 }

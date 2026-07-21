@@ -52,6 +52,36 @@ function Write-Item {
   [pscustomobject]@{ Level = $Level; Name = $Name; Message = $Message }
 }
 
+function ConvertTo-StringArray {
+  # Normalize PowerShell pipeline/assignment quirks (scalar vs array vs nested).
+  # Always return via unary comma so a 1-element string[] is NOT unrolled to [string]
+  # (otherwise $arr[0] indexes characters of the SHA).
+  param($Value)
+  $list = New-Object System.Collections.Generic.List[string]
+  if ($null -eq $Value) {
+    return , ([string[]]@())
+  }
+  # Strings are IEnumerable[char] — must not foreach the characters.
+  if ($Value -is [string]) {
+    return , ([string[]]@([string]$Value))
+  }
+  foreach ($item in $Value) {
+    if ($null -eq $item) { continue }
+    if ($item -is [string]) {
+      $list.Add([string]$item) | Out-Null
+    }
+    elseif ($item -is [System.Array] -and -not ($item -is [string])) {
+      foreach ($sub in $item) {
+        if ($null -ne $sub) { $list.Add([string]$sub) | Out-Null }
+      }
+    }
+    else {
+      $list.Add([string]$item) | Out-Null
+    }
+  }
+  return , ([string[]]$list.ToArray())
+}
+
 function Invoke-GitChecked {
   param(
     [Parameter(Mandatory = $true)]
@@ -68,14 +98,14 @@ function Invoke-GitChecked {
   $out = & git @GitArgs 2>&1
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
-  $lines = @($out | ForEach-Object { "$_" })
+  $lines = ConvertTo-StringArray $out
   if ($code -ne 0) {
     $script:GitFailed = $true
     $msg = "git $($GitArgs -join ' ') exit=$code :: $(($lines | Select-Object -First 3) -join ' | ')"
     $script:GitFailMessages.Add($msg) | Out-Null
-    return @()
+    return , ([string[]]@())
   }
-  return $lines
+  return , $lines
 }
 
 function Resolve-BaseRefSha {
@@ -89,22 +119,38 @@ function Resolve-BaseRefSha {
   if ($trimmed -match '[\s"''`]|--') {
     throw "BaseRef contains forbidden characters: $trimmed"
   }
-  $shaLines = Invoke-GitChecked @('rev-parse', '--verify', "$trimmed^{commit}")
-  if ($script:GitFailed -or $shaLines.Count -eq 0) {
+  # Do not index a bare string: ConvertTo-StringArray keeps a real string[].
+  $shaLines = ConvertTo-StringArray (Invoke-GitChecked @('rev-parse', '--verify', "$trimmed^{commit}"))
+  if ($script:GitFailed -or $null -eq $shaLines -or @($shaLines).Count -eq 0) {
     throw "BaseRef could not be resolved to a commit: $trimmed"
   }
-  return $shaLines[0].Trim()
+  # Prefer pipeline-safe first element extraction (never $string[0] char index).
+  $sha = (ConvertTo-StringArray $shaLines | Select-Object -First 1)
+  if ($sha -is [System.Array]) { $sha = -join $sha }
+  $sha = ([string]$sha).Trim()
+  if ($sha.Length -lt 40 -or $sha -notmatch '^[0-9a-fA-F]+$') {
+    throw "BaseRef resolved to unexpected value (len=$($sha.Length)): $sha"
+  }
+  return $sha
 }
 
-function Add-UntrackedPaths {
-  param([System.Collections.Generic.HashSet[string]] $Set)
-  foreach ($line in (Invoke-GitChecked @('status', '--porcelain', '-uall'))) {
+function Get-UntrackedPaths {
+  $paths = New-Object System.Collections.Generic.List[string]
+  foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('status', '--porcelain', '-uall')))) {
     if ($line.Length -lt 4) { continue }
     $xy = $line.Substring(0, 2)
     if ($xy -eq '??') {
       $path = $line.Substring(3).Trim().Trim('"').Replace('\', '/')
-      if ($path) { [void]$Set.Add($path) }
+      if ($path) { $paths.Add($path) | Out-Null }
     }
+  }
+  return [string[]]$paths.ToArray()
+}
+
+function Add-UntrackedPaths {
+  param([System.Collections.Generic.HashSet[string]] $Set)
+  foreach ($path in (ConvertTo-StringArray (Get-UntrackedPaths))) {
+    if ($path) { [void]$Set.Add($path) }
   }
 }
 
@@ -113,21 +159,21 @@ function Get-ChangedPaths {
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
   if ([string]::IsNullOrWhiteSpace($BaseSha)) {
-    foreach ($line in (Invoke-GitChecked @('diff', '--name-only'))) {
+    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--name-only')))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
-    foreach ($line in (Invoke-GitChecked @('diff', '--cached', '--name-only'))) {
+    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '--name-only')))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
   }
   else {
-    foreach ($line in (Invoke-GitChecked @('diff', '--name-only', $BaseSha))) {
+    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--name-only', $BaseSha)))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
-    foreach ($line in (Invoke-GitChecked @('diff', '--cached', '--name-only', $BaseSha))) {
+    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '--name-only', $BaseSha)))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
@@ -139,22 +185,35 @@ function Get-ChangedPaths {
 
 function Get-AddedDiffLines {
   param([string] $BaseSha)
-  $chunks = @()
+  $chunks = New-Object System.Collections.Generic.List[string]
   if ([string]::IsNullOrWhiteSpace($BaseSha)) {
-    $chunks += Invoke-GitChecked @('diff', '-U0')
-    $chunks += Invoke-GitChecked @('diff', '--cached', '-U0')
+    foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '-U0')))) { $chunks.Add($l) | Out-Null }
+    foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '-U0')))) { $chunks.Add($l) | Out-Null }
   }
   else {
-    $chunks += Invoke-GitChecked @('diff', '-U0', $BaseSha)
-    $chunks += Invoke-GitChecked @('diff', '--cached', '-U0', $BaseSha)
+    foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '-U0', $BaseSha)))) { $chunks.Add($l) | Out-Null }
+    foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '-U0', $BaseSha)))) { $chunks.Add($l) | Out-Null }
   }
-  $added = @()
+  $added = New-Object System.Collections.Generic.List[string]
   foreach ($line in $chunks) {
     if ($line.StartsWith('+') -and -not $line.StartsWith('+++')) {
-      $added += $line.Substring(1)
+      $added.Add($line.Substring(1)) | Out-Null
     }
   }
-  return $added
+  # Untracked files are invisible to git diff; read their full contents for F07/stub scans.
+  foreach ($path in (ConvertTo-StringArray (Get-UntrackedPaths))) {
+    if (-not $path) { continue }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+    try {
+      foreach ($fl in (ConvertTo-StringArray (Get-Content -LiteralPath $path -Encoding UTF8 -ErrorAction Stop))) {
+        $added.Add($fl) | Out-Null
+      }
+    }
+    catch {
+      # Unreadable untracked file: ignore content scan (path still in scope set).
+    }
+  }
+  return [string[]]$added.ToArray()
 }
 
 function Get-DeletedPaths {
@@ -167,7 +226,7 @@ function Get-DeletedPaths {
     @(@('diff', '--name-status', $BaseSha), @('diff', '--cached', '--name-status', $BaseSha))
   }
   foreach ($args in $argSets) {
-    foreach ($line in (Invoke-GitChecked $args)) {
+    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked $args))) {
       if ($line -match '^[D]\s+(.+)$') {
         [void]$set.Add($Matches[1].Trim().Replace('\', '/'))
       }
