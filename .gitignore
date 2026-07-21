@@ -1,0 +1,31 @@
+# Secrets & env
+.env
+.env.*
+!.env.example
+*.pem
+auth.json
+
+# Orchestra runtime
+.agents/logs/codex/*.last.txt
+.agents/logs/codex/*.stderr.log
+.agents/logs/codex/*.jsonl
+.agents/worktrees/
+.agents/locks/leases.json
+
+# Keep structure
+!.agents/logs/codex/.gitkeep
+!.agents/worktrees/.gitkeep
+!.agents/locks/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python / Node noise (if added later)
+__pycache__/
+node_modules/
+.venv/
+dist/
+build/

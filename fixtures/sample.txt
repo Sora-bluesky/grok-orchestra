@@ -1,0 +1,11 @@
+# Sample fixture for smoke review
+
+This file is intentionally a bit vague.
+
+The orchestra template uses it to test Codex read-only review
+without touching product code.
+
+Improvement ideas might include:
+- clearer purpose sentence
+- explicit audience
+- one concrete example of a Prompt Contract field
