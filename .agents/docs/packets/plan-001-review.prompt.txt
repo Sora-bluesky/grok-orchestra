@@ -1,0 +1,32 @@
+## Objective
+Review the Plan 001 changes (Pester baseline + CI + optional -LockDir on lease-paths.ps1) for correctness, test quality, CI readiness, and backward compatibility. Do not modify files.
+
+## Constraints
+- read-only; do not modify any files
+- Do not run network tools
+- Do not invoke codex CLI recursively
+- Respond in Japanese
+- Keep the whole answer under 80 lines
+- Focus only on the files listed under Relevant files
+
+## Relevant files
+- scripts/lease-paths.ps1
+- tests/lease-paths.Tests.ps1
+- tests/delegate-codex.Tests.ps1
+- .github/workflows/ci.yml
+- plans/001-ci-pester-baseline.md (acceptance context)
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- List concrete defects (if any) with file:line or file + symptom
+- Explicitly judge backward compatibility of default LockDir
+- Explicitly judge whether tests avoid calling real codex CLI
+- Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks

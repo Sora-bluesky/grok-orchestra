@@ -156,11 +156,11 @@ Step 2–3 がテストそのもの。構造は Pester 5 の `Describe/It` + `$T
 
 ## Done criteria
 
-- [ ] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0`、合計 9 件以上
-- [ ] `.\scripts\lease-paths.ps1 -Action check -OwnedPaths src` が従来通り動く(既定 LockDir)
-- [ ] `git status` で in-scope 外の変更が無い
-- [ ] リポジトリの `.agents/locks/` にテスト残骸(`*.lease.json`)が無い
-- [ ] `plans/README.md` の status 更新
+- [x] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0`、合計 9 件以上 (12 Passed, 2026-07-21)
+- [x] `.\scripts\lease-paths.ps1 -Action check -OwnedPaths src` が従来通り動く(既定 LockDir)
+- [x] `git status` で in-scope 外の変更が無い
+- [x] リポジトリの `.agents/locks/` にテスト残骸(`*.lease.json`)が無い
+- [x] `plans/README.md` の status 更新
 
 ## STOP conditions
 
