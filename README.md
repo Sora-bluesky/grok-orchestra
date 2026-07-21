@@ -11,7 +11,7 @@
 
 **grok-orchestra** is a multi-agent development harness that orchestrates [Grok Build](https://x.ai) (xAI) and [OpenAI Codex CLI](https://github.com/openai/codex): **Grok is the operator and default implementer, Codex is the skeptic** — designer, independent reviewer, and root-cause investigator.
 
-Current release: **[v0.1.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.1.0)** · [Changelog](CHANGELOG.md) · `main` carries v0.2.0 development (tests, CI, doctor/verify tooling, installer).
+Current release: **[v0.2.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.2.0)** · [Changelog](CHANGELOG.md)
 
 Inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) by @mkj (Matsuo Institute) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra).
 
