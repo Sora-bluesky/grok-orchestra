@@ -13,12 +13,14 @@ Active main agent is recorded in `.agents/STATE.md` (default: **Grok**).
 
 The main agent must **not** by default:
 
-- Large multi-file implementation
 - Broad cross-codebase investigation dumps into its own context
 - Long raw log ingestion
-- Claim “done” without running the verify gate
+- Own design/trade-off decisions when judgment matters (route to Codex)
+- Claim “done” without the verify gate
+- Treat self-review as the only quality gate after non-trivial changes
 
-Delegate these to Codex (or a focused Grok subagent that returns a short summary).
+Prefer **Grok for implementation** and **Codex for design / review / debug**.  
+Escalate implementation away from the parent only when it would pollute context (see Routing).
 
 ## Priority order (context clash → F03)
 
@@ -34,31 +36,46 @@ On conflict: stop and ask the user (do not implement).
 
 | Tier | ID | Runtime | Role |
 |------|-----|---------|------|
-| 1 | default | Grok | Orchestrator, light research, tiny edits, integration, **verify** |
-| 2 | sol | Codex CLI | Design, plan, complex impl, debug, audit |
+| 1 | default | Grok | Orchestrator, default **Builder**, light research, integration, **verify** |
+| 2 | sol | Codex CLI | Designer, Debugger, **Auditor** (default); Implementer only as exception |
 | 3 | fable | TBD | Rare advisor — not MVP |
+
+**One-line rule:** Sol is the skeptic (design/review). Grok moves the hands (implement + final verify).
 
 ## Routing
 
 | Situation | Route |
 |-----------|--------|
-| Tiny 1-file obvious fix | Grok direct |
 | Design / trade-offs / plan | Codex `read-only` |
 | Unknown root cause | Codex `read-only` (debug) |
-| Code review / QA | Codex `read-only` |
-| Multi-file or risky implement | Codex `workspace-write` |
-| After any implement/fix | **verify-job** (Operator) |
+| Code review / QA / audit | Codex `read-only` |
+| Implement (default): clear scope, iterative | **Grok** |
+| After non-trivial Grok implement | Codex `read-only` review → then **verify-job** |
+| Tiny 1-file obvious fix | Grok direct → verify-job (Codex review optional) |
+| Large / long-running / context-heavy implement | Codex `workspace-write` **or** Grok subagent/worktree (exception) |
+| After any Codex implement/fix | **verify-job** (Operator) |
+
+### When Codex may still implement (exception)
+
+Use Codex `workspace-write` only if **any** of:
+
+1. Change set would bloat Operator context (many files, long logs, mechanical mass edit)  
+2. Long unattended batch is preferable to interactive Grok turns  
+3. User explicitly requests Codex implement  
+
+Otherwise Grok implements.
 
 ## Shared memory (F20)
 
 Grok and Codex **do not share sessions**.  
-The only shared surface is **files**: packets, results, local STATE / HANDOFF / PROGRESS (gitignored), DESIGN.
+The only shared surface is **files**: packets, results, local STATE / PROGRESS (gitignored), DESIGN.
 
 ## Isolation (F08) — L0 default
 
-- At most **one** write job (`implement` / `fix`) running.
-- While it runs, Operator must not edit product code in the same tree.
-- read-only jobs may run in parallel.
+- At most **one** writer of product code at a time (Grok **or** Codex, not both).
+- While a Codex write job runs, Operator must not edit product code in the same tree.
+- While Grok implements, do not start a Codex write job on the same tree.
+- read-only Codex jobs may run in parallel with Operator reads (not with conflicting writes).
 - L1 leases and L2 worktrees: see `.agents/rules/isolation.md`.
 
 ## Prompt Contract (every Codex call — F04)
@@ -74,7 +91,8 @@ Incomplete contract → **do not** run `codex exec`.
 ## Done means (F06)
 
 Worker prose is never done.  
-Done = Operator ran acceptance commands + inspected diff (see `verify-job` skill).
+Done = Operator ran acceptance commands + inspected diff (see `verify-job` skill).  
+After non-trivial Grok patches, also land a Codex review packet before calling done.
 
 ## Circuit breaker (F05 / F17)
 
@@ -87,17 +105,17 @@ Required catalog: `.agents/docs/failure-modes.md` (F01–F20).
 ## Skill entry points
 
 - `context-loader` — load STATE + DESIGN + active task only  
-- `codex-system` — delegate via `scripts/delegate-codex.ps1`  
-- `verify-job` — post-implement gate  
+- `codex-system` — delegate design/review/debug (and exceptional implement) via `scripts/delegate-codex.ps1`  
+- `verify-job` — post-implement gate (after Grok or Codex writes)  
 - `init` — place or verify the file SSOT safely  
 - `startproject` — run the six-phase project kickoff  
-- `plan` — produce a read-only, approval-gated plan  
-- `tdd` — run a verified red-green-refactor chain  
-- `simplify` — audit first, then apply an optional bounded fix  
-- `checkpointing` — synchronize STATE, PROGRESS, and HANDOFF  
+- `plan` — produce a read-only, approval-gated plan (Codex)  
+- `tdd` — red-green-refactor; Grok writes by default; Codex reviews  
+- `simplify` — Codex audit first, then optional Grok fix  
+- `checkpointing` — synchronize local STATE / PROGRESS  
 - `design-tracker` — maintain design decisions and review evidence  
 
 ## Language
 
-- Reply in the user's language (default Japanese for sora).  
+- Reply in the user's language.  
 - Commit messages in English.

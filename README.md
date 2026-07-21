@@ -2,96 +2,117 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**Grok as operator · Codex CLI as the only worker.**
+**Grok as operator · Codex CLI as the specialist worker.**
 
-A multi-agent development harness inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) (concept only; no Claude Code worker path).
+A multi-agent development harness: you talk only to **Grok**. **Codex** handles design, review, and deep debug by default. Grok implements by default and always owns verification.
+
+Inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) (concepts only — no Claude Code worker path).
 
 ## Why
 
-- Single user interface: talk to **Grok** only
-- Deep design / review / complex implementation: **Codex** (`codex exec`)
-- Shared state lives in **files** (Grok and Codex do not share a session)
-- Failure modes (context rot, dual-write, false done, cost blowup, …) are designed out — see `.agents/docs/failure-modes.md`
+- **Single UI** — talk to Grok only
+- **Clear split** — Grok builds; Codex plans/reviews/debugs (Codex implement is the exception)
+- **File SSOT** — Grok and Codex do not share a chat session; packets and docs are the shared surface
+- **Failure modes designed in** — context rot, dual-write, false done, cost blowup, and more: [`.agents/docs/failure-modes.md`](.agents/docs/failure-modes.md)
 
 ## Prerequisites
 
-- [Grok Build](https://x.ai) CLI authenticated (`grok login` or `XAI_API_KEY`)
-- [Codex CLI](https://github.com/openai/codex) authenticated (`codex login`)
-- Windows PowerShell 7+ recommended
+| Tool | Notes |
+|------|--------|
+| [Grok Build](https://x.ai) CLI | `grok login` (or `XAI_API_KEY`) |
+| [Codex CLI](https://github.com/openai/codex) | `codex login` |
+| Windows PowerShell 7+ | Recommended for scripts |
 
 ```powershell
 codex --version
-grok models   # or grok --version
+grok models   # or: grok --version
 ```
 
 ## Quick start
 
-This repository is a **harness template**. Use the contract files **in this tree** — not a `HANDOFF.md` from another project, and not another repo’s `AGENTS.md`.
+Clone this repo (or use it as a template), then work **inside this tree** so Grok loads **this** contract.
 
 ```powershell
-cd path\to\grok-orchestra
-# optional local state for this workspace only:
-Copy-Item .agents\STATE.example.md .agents\STATE.md
+git clone https://github.com/Sora-bluesky/grok-orchestra.git
+cd grok-orchestra
+Copy-Item .agents\STATE.example.md .agents\STATE.md   # optional workspace state
 grok
 ```
 
-First message to Grok (example):
+Example first message:
 
 ```text
 You are the operator for this grok-orchestra workspace.
-Follow the contract in ./AGENTS.md and skills under ./.agents/skills/.
-Do not look for HANDOFF.md (local/optional; not part of the public template).
+Follow ./AGENTS.md and skills under ./.agents/skills/.
 If .agents/STATE.md is missing, seed it from .agents/STATE.example.md.
-Summarize topology and next safe action in under 10 lines.
+Summarize topology and the next safe action in under 10 lines.
 ```
 
-Smoke (Codex read-only review from this repo):
+### Smoke test (Codex read-only)
 
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
 
-### Using this harness inside another project
-
-1. Copy or submodule the `.agents/`, `scripts/`, and root contract pattern into the target app.  
-2. **Merge carefully** with that app’s existing `AGENTS.md` (priority: user instruction → active packet → this harness contract).  
-3. Keep session continuity files **local-only** if you use them:
-
-| File | Public? | Purpose |
-|------|---------|---------|
-| `AGENTS.md` (this repo) | Tracked | Tool-neutral operator contract for *this* harness |
-| `.agents/STATE.example.md` | Tracked | Seed for local state |
-| `.agents/STATE.md` | gitignored | Live phase / last job (optional) |
-| `PROGRESS.md` | gitignored | Dated log (optional) |
-| `HANDOFF.md` | gitignored | Operator continuity (optional; maintainers only) |
+Expect a non-empty `.agents/logs/codex/smoke-001.last.txt` (gitignored).
 
 ## Roles
 
 | Role | Owner |
 |------|--------|
-| Orchestrator / light research / tiny edits / verify | Grok |
-| Designer / Debugger / Auditor / complex implement | Codex |
+| Orchestrator, default **Builder**, light research, **verify** | Grok |
+| Designer, Debugger, **Auditor** | Codex (`read-only`) |
+| Implementer (exception) | Codex `workspace-write` only if context would bloat, the batch is long/unattended, or you explicitly ask |
+
+**Rule of thumb:** Codex is the skeptic; Grok moves the hands. After non-trivial Grok patches, run a Codex review before calling the work done.
 
 ## Isolation
 
 | Layer | Meaning |
 |-------|---------|
-| **L0** (default) | One writer; Operator freezes code edits during Codex implement |
-| **L1** | File-ownership leases via `scripts/lease-paths.ps1` |
-| **L2** (later) | Git worktree per job — optional, not CCO default |
+| **L0** (default) | One writer of product code at a time (Grok **or** Codex, not both) |
+| **L1** | Path leases via `scripts/lease-paths.ps1` |
+| **L2** (optional later) | Git worktree per job |
+
+## Using this harness in another project
+
+1. Copy (or submodule) `.agents/`, `scripts/`, root `AGENTS.md`, and `.codex/` / `.grok/` as needed.  
+2. Merge carefully with the app’s existing agent contract (priority: user instruction → active packet → this harness contract).  
+3. Keep live session state local if you use it:
+
+| Path | Tracked? | Purpose |
+|------|----------|---------|
+| `AGENTS.md` | yes | Operator contract for this harness |
+| `.agents/STATE.example.md` | yes | Seed for optional local state |
+| `.agents/STATE.md` | no (gitignored) | Live phase / last job |
+| `PROGRESS.md` | no (gitignored) | Optional dated log |
 
 ## Layout
 
 ```text
-AGENTS.md                      # Public harness contract (this repo)
-.agents/                       # SSOT: rules, skills, docs, logs
-.agents/STATE.example.md       # Seed for optional local STATE.md
-.grok/rules/                   # Grok-native thin rules
-.codex/AGENTS.md               # Worker-facing contract for Codex in this tree
+AGENTS.md                 # Operator contract (always start here)
+.agents/                  # Rules, skills, docs, packets, logs
+.agents/STATE.example.md  # Optional seed for local STATE.md
+.codex/AGENTS.md          # Contract shown to Codex in this tree
+.grok/rules/              # Thin Grok operator rules
 scripts/delegate-codex.ps1
 scripts/lease-paths.ps1
-# Optional local only (gitignored): HANDOFF.md, PROGRESS.md, .agents/STATE.md
+docs/architecture.md
 ```
+
+## Skills (entry points)
+
+| Skill | Use for |
+|-------|---------|
+| `context-loader` | Minimal session load |
+| `codex-system` | Delegate to Codex (design/review/debug; implement only as exception) |
+| `verify-job` | Done gate after any product write |
+| `plan` | Codex design/plan, approval before implement |
+| `tdd` | Red → green → refactor (Grok writes; Codex reviews) |
+| `simplify` | Codex audit, then optional Grok fix |
+| `init` / `startproject` / `checkpointing` / `design-tracker` | Bootstrap and continuity |
+
+Details: [`.agents/INDEX.md`](.agents/INDEX.md).
 
 ## License
 

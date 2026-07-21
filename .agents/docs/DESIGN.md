@@ -2,19 +2,28 @@
 
 ## Purpose
 
-grok-orchestra is a template harness: Grok operates; Codex executes specialized work.
+grok-orchestra is a template harness: Grok operates and **implements by default**; Codex (sol) designs, reviews, and debugs by default.
 
 ## Invariants
 
 1. User-facing interface is Grok only (no Claude Code worker path).
 2. Grok and Codex share state only via files under `.agents/` (and repo docs).
-3. Write jobs are single-writer (L0) unless L1/L2 explicitly engaged.
+3. Write jobs are single-writer (L0) unless L1/L2 explicitly engaged — writer may be Grok or Codex, not both.
 4. danger-full-access is never the default sandbox.
 5. “Done” requires Operator verification for write jobs.
+6. Codex implement is an **exception** (context bloat / long batch / explicit user request), not the default.
 
 ## Architecture (macro)
 
 See `docs/architecture.md` and root `AGENTS.md`.
+
+## Routing (locked)
+
+| Default | Owner |
+|---------|--------|
+| Implement | Grok |
+| Design / plan / debug / review | Codex `read-only` |
+| Verify | Grok (`verify-job`) |
 
 ## Isolation
 

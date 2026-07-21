@@ -1,9 +1,16 @@
 ---
 name: codex-system
-description: Delegate design, review, debug, or implement work to Codex CLI via scripts/delegate-codex.ps1. Use when Grok needs Tier-2 sol worker.
+description: Delegate design, review, debug, or exceptional implement work to Codex CLI via scripts/delegate-codex.ps1. Default Sol roles are design/review/debug.
 ---
 
 # codex-system
+
+## Default vs exception
+
+| Type | When |
+|------|------|
+| `design`, `investigate`, `review` | **Default** Sol work |
+| `implement`, `fix` | **Exception** only (context bloat / long batch / user request). Prefer Grok implement. |
 
 ## Steps
 
@@ -17,9 +24,10 @@ description: Delegate design, review, debug, or implement work to Codex CLI via 
 
 4. Read `.agents/logs/codex/{id}.last.txt` (summarize if long — F01).
 5. If type is `implement` or `fix`, run **verify-job**.
-6. Update `.agents/STATE.md`.
+6. If type is `review` after a Grok patch, fold findings then **verify-job** before done.
+7. Update `.agents/STATE.md`.
 
-For L1, declare `owned_paths` in the packet and pass `-OwnedPaths` for `implement` or `fix`. The wrapper calls `scripts/lease-paths.ps1` before spawn and releases the lease afterward. Empty `OwnedPaths` keeps L0-only behavior.
+For L1 on exceptional write jobs, declare `owned_paths` and pass `-OwnedPaths`. Empty `OwnedPaths` keeps L0-only behavior.
 
 ## Types → sandbox
 
@@ -31,9 +39,10 @@ For L1, declare `owned_paths` in the packet and pass `-OwnedPaths` for `implemen
 ## Forbidden
 
 - danger-full-access by default
-- Starting a second write job while one is running (L0)
+- Starting a second write job while one is running (L0) — includes Grok already writing product code
 - Skipping verify-job after writes
+- Using Codex implement as the default path for interactive scoped work
 
 ## Cost note (F11)
 
-Prefer serial write jobs. Parallel implement only after L1/L2.
+Prefer serial jobs. Prefer read-only Sol calls. Parallel write only after L1/L2.
