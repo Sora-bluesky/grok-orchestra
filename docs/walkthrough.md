@@ -167,13 +167,15 @@ For Grok-direct edits without a Codex log, use `-SkipLog`. For write leases, pas
 
 ## 5. Next step: your own project
 
-Install the harness into another app tree (Plan 003):
+Install the harness into another app tree (Plan 003). `-Target` must already exist:
 
 ```powershell
-.\scripts\install.ps1 -Target C:\path\to\your-app
+$app = Join-Path $env:TEMP 'grok-orchestra-install-demo'
+New-Item -ItemType Directory -Force -Path $app | Out-Null
+.\scripts\install.ps1 -Target $app
 ```
 
-Then seed local state, edit the generated smoke packet TODOs, run `check.ps1`, and repeat this cycle with **your** paths.
+Then in that directory seed local state, edit the generated smoke packet TODOs, run `check.ps1`, and repeat this cycle with **your** paths.
 
 ## Reproduce this page
 

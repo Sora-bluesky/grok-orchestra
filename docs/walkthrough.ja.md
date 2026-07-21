@@ -166,14 +166,15 @@ verify-job: PASS
 Codex ログ無しの Grok 直接実装では `-SkipLog` を使います。書き込みリース時は `-OwnedPaths` でスコープ逸脱を fail-closed にします。
 ## 5. 次の一歩: 自分のプロジェクトへ
 
-ハーネスを別アプリに敷く（Plan 003）:
+ハーネスを別アプリに敷く（Plan 003）。`-Target` は**既存ディレクトリ**である必要があります:
 
 ```powershell
-.\scripts\install.ps1 -Target C:\path\to\your-app
+$app = Join-Path $env:TEMP 'grok-orchestra-install-demo'
+New-Item -ItemType Directory -Force -Path $app | Out-Null
+.\scripts\install.ps1 -Target $app
 ```
 
-STATE を seed し、生成された smoke packet の TODO を直し、`check.ps1` のあと **自分のパス** でこのサイクルを繰り返します。
-
+そのディレクトリで STATE を seed し、生成された smoke packet の TODO を直し、`check.ps1` のあと **自分のパス** でこのサイクルを繰り返します。
 ## このページの再現
 
 Codex ログイン済みの clone で:
