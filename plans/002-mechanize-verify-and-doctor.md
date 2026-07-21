@@ -71,6 +71,8 @@ verify-job は**手動チェックリスト**(`.agents/skills/verify-job/SKILL.m
 - `.agents/skills/verify-job/SKILL.md`(スクリプト参照の追記のみ — チェックリスト自体は残す)
 - `tests/check.Tests.ps1`, `tests/verify-job.Tests.ps1`(create)
 - `.agents/docs/DESIGN.md`(open question の check.ps1 行を「実装済み」に更新)
+- `plans/README.md`(本プランの status 行のみ)
+- `plans/002-mechanize-verify-and-doctor.md`(Done criteria チェック反映のみ)
 
 **Out of scope**:
 - `scripts/lease-paths.ps1`(Plan 001 の変更以外触らない)
@@ -117,33 +119,43 @@ Contract 検査通過をもって可とし、その旨記録)。
 ### Step 3: scripts/verify-job.ps1 を書く(判定のみ、修正はしない)
 
 パラメータ: `[string] $JobId`(必須), `[string[]] $OwnedPaths = @()`,
-`[string] $BaseRef = ''`(比較基点。省略時は working tree の `git status`/`git diff` を対象)。
+`[string] $BaseRef = ''`(比較基点。省略時は working tree + index の変更を対象)。
 判定項目(SKILL.md チェックリストの機械化可能部分):
 
 1. **Status**: `.agents/logs/codex/{JobId}.last.txt` が存在し非空(Codex ジョブの場合)。
    Grok 直接実装の検証では `-SkipLog` スイッチで飛ばせるようにする。
-2. **Diff scope**: `git diff --name-only`(+ `git status --porcelain` の未追跡分)を取り、
-   `-OwnedPaths` 指定時は全変更ファイルがいずれかの owned path 配下であること。
+2. **Diff scope**(index を見落とさないこと — PR #8 Codex review P1):
+   次を**合算**して変更ファイル集合を作る(重複は除去):
+   - unstaged: `git diff --name-only`
+   - staged/index: `git diff --cached --name-only`
+   - untracked: `git status --porcelain` の `??` 行
+   `-BaseRef` 指定時は `git diff --name-only $BaseRef` と
+   `git diff --name-only --cached $BaseRef`(必要な方)で同様に index を含める。
+   `-OwnedPaths` 指定時は集合の全パスがいずれかの owned path 配下であること。
    逸脱ファイルは列挙して FAIL。
-3. **スタブ検出**: 変更ファイルの追加行に `NotImplementedError` / `TODO:` /
-   `throw new Error('not implemented')` を検出したら WARN(FAIL ではない — 文脈判断は
-   Operator に残す)。
-4. **テスト弱体化(F07)**: 削除されたファイル名が `test|spec|Tests` にマッチ、または
-   追加行に `Skip = $true` / `it.skip` / `describe.skip` / `@pytest.mark.skip` を検出
+3. **スタブ検出**: 変更ファイルの**追加行**を unstaged + staged の両方から取る
+   (`git diff -U0` と `git diff --cached -U0`)。追加行に
+   `NotImplementedError` / `TODO:` / `throw new Error('not implemented')` を検出したら
+   WARN(FAIL ではない — 文脈判断は Operator に残す)。
+4. **テスト弱体化(F07)**: 削除されたファイル名(unstaged + staged の両 diff)が
+   `test|spec|Tests` にマッチ、または追加行(同上、index 含む)に
+   `Skip = $true` / `it.skip` / `describe.skip` / `@pytest.mark.skip` を検出
    したら FAIL(理由付きで `-AcceptTestChanges` スイッチによる明示上書きのみ許す)。
 5. 出力: 項目ごとの PASS/WARN/FAIL 一覧と最終判定(`verify-job: PASS` / `FAIL`)。
    FAIL 時 exit 1。**このスクリプトはコミット・マージ・修正を一切行わない。**
 
 **Verify**: 変更ゼロの working tree で `.\scripts\verify-job.ps1 -JobId smoke-001 -SkipLog`
-→ PASS、exit 0。ダミーのテストファイル削除を staged にして実行 → FAIL、exit 1
-(確認後 `git restore` で戻す)。
+→ PASS、exit 0。ダミーのテストファイル削除を **staged**(`git add` 済み)にして実行 →
+FAIL、exit 1(確認後 `git restore --staged` / `git restore` で戻す)。
+同じ削除が unstaged のみのときも FAIL すること(両経路の回帰)。
 
 ### Step 4: テストと文書更新
 
 - `tests/check.Tests.ps1`: `$TestDrive` の LockDir に偽ステールロック/リースを置き、
   検出と `-Fix` の挙動を検証(4 ケース以上)。
 - `tests/verify-job.Tests.ps1`: 一時 git リポジトリ(`git init` in `$TestDrive`)で
-  scope 逸脱と test 削除検出を検証(3 ケース以上)。
+  scope 逸脱と test 削除検出を検証(3 ケース以上)。**staged と unstaged の両経路**で
+  test 削除が FAIL になるケースを最低 1 つずつ含むこと。
 - `.agents/skills/verify-job/SKILL.md` の Checklist 冒頭に 1 行追記:
   「機械化可能な項目は `scripts/verify-job.ps1 -JobId <id>` を先に実行し、その出力を
   この checklist の証跡とする」。
