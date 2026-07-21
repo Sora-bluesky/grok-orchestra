@@ -7,11 +7,12 @@
 .PARAMETER OwnedPaths
   Optional repo-relative path prefixes; all changed files must fall under one.
 .PARAMETER BaseRef
-  Optional git ref for comparison (includes worktree vs ref). Empty = worktree+index+untracked.
+  Optional git ref for comparison. Resolved to a commit SHA first; values starting
+  with '-' are rejected (prevents git option injection such as --output=...).
 .PARAMETER SkipLog
   Skip Codex log non-empty check (Grok-direct implement).
 .PARAMETER AcceptTestChanges
-  Explicit override for F07 test-weakening FAIL (still reports WARN-style note as PASS with accept).
+  Explicit override for F07 test-weakening FAIL.
 .PARAMETER RepoRoot
   Override repository root.
 #>
@@ -32,6 +33,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:GitFailed = $false
+$script:GitFailMessages = [System.Collections.Generic.List[string]]::new()
 
 function Get-RepoRoot {
   if ($RepoRoot) { return (Resolve-Path -LiteralPath $RepoRoot).Path }
@@ -49,65 +52,101 @@ function Write-Item {
   [pscustomobject]@{ Level = $Level; Name = $Name; Message = $Message }
 }
 
-function Invoke-Git {
-  param([string[]] $GitArgs)
+function Invoke-GitChecked {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]] $GitArgs
+  )
+  # Defense in depth: never pass a bare option-looking token after subcommand without allowlist.
+  foreach ($a in $GitArgs) {
+    if ($a -match '^--output(=|$)') {
+      throw "Refusing git argument that can write files: $a"
+    }
+  }
   $prev = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   $out = & git @GitArgs 2>&1
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
-  return [pscustomobject]@{
-    ExitCode = $code
-    Lines    = @($out | ForEach-Object { "$_" })
+  $lines = @($out | ForEach-Object { "$_" })
+  if ($code -ne 0) {
+    $script:GitFailed = $true
+    $msg = "git $($GitArgs -join ' ') exit=$code :: $(($lines | Select-Object -First 3) -join ' | ')"
+    $script:GitFailMessages.Add($msg) | Out-Null
+    return @()
+  }
+  return $lines
+}
+
+function Resolve-BaseRefSha {
+  param([string] $Ref)
+  if ([string]::IsNullOrWhiteSpace($Ref)) { return '' }
+  $trimmed = $Ref.Trim()
+  # Reject option-shaped input (F10: BaseRef must not inject git flags).
+  if ($trimmed.StartsWith('-')) {
+    throw "BaseRef must be a ref/SHA, not a git option: $trimmed"
+  }
+  if ($trimmed -match '[\s"''`]|--') {
+    throw "BaseRef contains forbidden characters: $trimmed"
+  }
+  $shaLines = Invoke-GitChecked @('rev-parse', '--verify', "$trimmed^{commit}")
+  if ($script:GitFailed -or $shaLines.Count -eq 0) {
+    throw "BaseRef could not be resolved to a commit: $trimmed"
+  }
+  return $shaLines[0].Trim()
+}
+
+function Add-UntrackedPaths {
+  param([System.Collections.Generic.HashSet[string]] $Set)
+  foreach ($line in (Invoke-GitChecked @('status', '--porcelain', '-uall'))) {
+    if ($line.Length -lt 4) { continue }
+    $xy = $line.Substring(0, 2)
+    if ($xy -eq '??') {
+      $path = $line.Substring(3).Trim().Trim('"').Replace('\', '/')
+      if ($path) { [void]$Set.Add($path) }
+    }
   }
 }
 
 function Get-ChangedPaths {
-  param([string] $BaseRefValue)
+  param([string] $BaseSha)
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
-  if ([string]::IsNullOrWhiteSpace($BaseRefValue)) {
-    foreach ($line in (Invoke-Git @('diff', '--name-only')).Lines) {
+  if ([string]::IsNullOrWhiteSpace($BaseSha)) {
+    foreach ($line in (Invoke-GitChecked @('diff', '--name-only'))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
-    foreach ($line in (Invoke-Git @('diff', '--cached', '--name-only')).Lines) {
+    foreach ($line in (Invoke-GitChecked @('diff', '--cached', '--name-only'))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
-    }
-    foreach ($line in (Invoke-Git @('status', '--porcelain')).Lines) {
-      if ($line.Length -lt 4) { continue }
-      $code = $line.Substring(0, 2)
-      if ($code -eq '??' -or $code.Trim() -eq '??') {
-        $path = $line.Substring(3).Trim().Trim('"').Replace('\', '/')
-        if ($path) { [void]$set.Add($path) }
-      }
     }
   }
   else {
-    foreach ($line in (Invoke-Git @('diff', '--name-only', $BaseRefValue)).Lines) {
+    foreach ($line in (Invoke-GitChecked @('diff', '--name-only', $BaseSha))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
-    foreach ($line in (Invoke-Git @('diff', '--name-only', '--cached', $BaseRefValue)).Lines) {
+    foreach ($line in (Invoke-GitChecked @('diff', '--cached', '--name-only', $BaseSha))) {
       $t = $line.Trim()
       if ($t) { [void]$set.Add($t.Replace('\', '/')) }
     }
   }
-
+  # Always include untracked (owned_paths can escape via new files under any BaseRef mode).
+  Add-UntrackedPaths -Set $set
   return @($set)
 }
 
 function Get-AddedDiffLines {
-  param([string] $BaseRefValue)
+  param([string] $BaseSha)
   $chunks = @()
-  if ([string]::IsNullOrWhiteSpace($BaseRefValue)) {
-    $chunks += (Invoke-Git @('diff', '-U0')).Lines
-    $chunks += (Invoke-Git @('diff', '--cached', '-U0')).Lines
+  if ([string]::IsNullOrWhiteSpace($BaseSha)) {
+    $chunks += Invoke-GitChecked @('diff', '-U0')
+    $chunks += Invoke-GitChecked @('diff', '--cached', '-U0')
   }
   else {
-    $chunks += (Invoke-Git @('diff', '-U0', $BaseRefValue)).Lines
-    $chunks += (Invoke-Git @('diff', '--cached', '-U0', $BaseRefValue)).Lines
+    $chunks += Invoke-GitChecked @('diff', '-U0', $BaseSha)
+    $chunks += Invoke-GitChecked @('diff', '--cached', '-U0', $BaseSha)
   }
   $added = @()
   foreach ($line in $chunks) {
@@ -119,21 +158,18 @@ function Get-AddedDiffLines {
 }
 
 function Get-DeletedPaths {
-  param([string] $BaseRefValue)
+  param([string] $BaseSha)
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-  $nameStatusArgs = if ([string]::IsNullOrWhiteSpace($BaseRefValue)) {
+  $argSets = if ([string]::IsNullOrWhiteSpace($BaseSha)) {
     @(@('diff', '--name-status'), @('diff', '--cached', '--name-status'))
   }
   else {
-    @(@('diff', '--name-status', $BaseRefValue), @('diff', '--cached', '--name-status', $BaseRefValue))
+    @(@('diff', '--name-status', $BaseSha), @('diff', '--cached', '--name-status', $BaseSha))
   }
-  foreach ($args in $nameStatusArgs) {
-    foreach ($line in (Invoke-Git $args).Lines) {
+  foreach ($args in $argSets) {
+    foreach ($line in (Invoke-GitChecked $args)) {
       if ($line -match '^[D]\s+(.+)$') {
         [void]$set.Add($Matches[1].Trim().Replace('\', '/'))
-      }
-      elseif ($line -match '^[R][0-9]*\s+\S+\s+(.+)$') {
-        # renames are not pure deletes
       }
     }
   }
@@ -178,68 +214,102 @@ else {
   }
 }
 
-# 2. Diff scope (worktree + index + untracked)
-$changed = @(Get-ChangedPaths -BaseRefValue $BaseRef)
-if ($OwnedPaths.Count -gt 0) {
-  $escapes = @()
-  foreach ($path in $changed) {
-    if (-not (Test-UnderOwnedPaths -Path $path -Owned $OwnedPaths)) {
-      $escapes += $path
-    }
-  }
-  if ($escapes.Count -gt 0) {
-    $items.Add((Write-Item FAIL 'diff:scope' ("outside owned_paths: {0}" -f ($escapes -join ', ')))) | Out-Null
-    $fail = $true
-  }
-  else {
-    $items.Add((Write-Item PASS 'diff:scope' ("{0} path(s) within owned_paths" -f $changed.Count))) | Out-Null
+# Resolve BaseRef early (fail closed)
+$baseSha = ''
+try {
+  if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
+    $baseSha = Resolve-BaseRefSha -Ref $BaseRef
+    $items.Add((Write-Item PASS 'git:baseref' "resolved to $baseSha")) | Out-Null
   }
 }
-else {
-  $items.Add((Write-Item PASS 'diff:scope' ("owned_paths not set; {0} changed path(s) observed" -f $changed.Count))) | Out-Null
+catch {
+  $items.Add((Write-Item FAIL 'git:baseref' $_.Exception.Message)) | Out-Null
+  $fail = $true
+}
+
+# 2. Diff scope (worktree + index + untracked; BaseRef uses resolved SHA only)
+$changed = @()
+if (-not $fail) {
+  $changed = @(Get-ChangedPaths -BaseSha $baseSha)
+}
+if ($script:GitFailed) {
+  $items.Add((Write-Item FAIL 'git' (($script:GitFailMessages | Select-Object -First 3) -join '; '))) | Out-Null
+  $fail = $true
+}
+
+if (-not $fail) {
+  if ($OwnedPaths.Count -gt 0) {
+    $escapes = @()
+    foreach ($path in $changed) {
+      if (-not (Test-UnderOwnedPaths -Path $path -Owned $OwnedPaths)) {
+        $escapes += $path
+      }
+    }
+    if ($escapes.Count -gt 0) {
+      $items.Add((Write-Item FAIL 'diff:scope' ("outside owned_paths: {0}" -f ($escapes -join ', ')))) | Out-Null
+      $fail = $true
+    }
+    else {
+      $items.Add((Write-Item PASS 'diff:scope' ("{0} path(s) within owned_paths" -f $changed.Count))) | Out-Null
+    }
+  }
+  else {
+    $items.Add((Write-Item PASS 'diff:scope' ("owned_paths not set; {0} changed path(s) observed" -f $changed.Count))) | Out-Null
+  }
 }
 
 # 3. Stub detection (WARN only)
-$addedLines = @(Get-AddedDiffLines -BaseRefValue $BaseRef)
-$stubHits = @()
-foreach ($line in $addedLines) {
-  if ($line -match 'NotImplementedError' -or $line -match 'TODO:' -or $line -match "throw new Error\('not implemented'\)") {
-    $stubHits += $line.Trim()
-  }
-}
-if ($stubHits.Count -gt 0) {
-  $sample = ($stubHits | Select-Object -First 3) -join ' | '
-  $items.Add((Write-Item WARN 'stub' "possible stub markers in added lines: $sample")) | Out-Null
-}
-else {
-  $items.Add((Write-Item PASS 'stub' 'no stub markers in added lines')) | Out-Null
-}
-
-# 4. Test weakening (F07) — staged + unstaged
-$deleted = @(Get-DeletedPaths -BaseRefValue $BaseRef)
-$testDeleteHits = @($deleted | Where-Object { $_ -match '(?i)(test|spec|Tests)' })
-$skipHits = @()
-foreach ($line in $addedLines) {
-  if ($line -match 'Skip\s*=\s*\$true' -or $line -match 'it\.skip' -or $line -match 'describe\.skip' -or $line -match '@pytest\.mark\.skip') {
-    $skipHits += $line.Trim()
-  }
-}
-
-if ($testDeleteHits.Count -gt 0 -or $skipHits.Count -gt 0) {
-  $msgParts = @()
-  if ($testDeleteHits.Count -gt 0) { $msgParts += "deleted test-like paths: $($testDeleteHits -join ', ')" }
-  if ($skipHits.Count -gt 0) { $msgParts += "skip markers: $(($skipHits | Select-Object -First 3) -join ' | ')" }
-  $msg = $msgParts -join '; '
-  if ($AcceptTestChanges) {
-    $items.Add((Write-Item PASS 'f07:tests' "accepted via -AcceptTestChanges: $msg")) | Out-Null
-  }
-  else {
-    $items.Add((Write-Item FAIL 'f07:tests' "$msg (use -AcceptTestChanges to override)")) | Out-Null
+$addedLines = @()
+$deleted = @()
+if (-not $fail) {
+  $addedLines = @(Get-AddedDiffLines -BaseSha $baseSha)
+  $deleted = @(Get-DeletedPaths -BaseSha $baseSha)
+  if ($script:GitFailed) {
+    $items.Add((Write-Item FAIL 'git' (($script:GitFailMessages | Select-Object -First 3) -join '; '))) | Out-Null
     $fail = $true
   }
 }
-else {
-  $items.Add((Write-Item PASS 'f07:tests' 'no test deletion or skip markers detected')) | Out-Null
+
+if (-not $fail) {
+  $stubHits = @()
+  foreach ($line in $addedLines) {
+    if ($line -match 'NotImplementedError' -or $line -match 'TODO:' -or $line -match "throw new Error\('not implemented'\)") {
+      $stubHits += $line.Trim()
+    }
+  }
+  if ($stubHits.Count -gt 0) {
+    $sample = ($stubHits | Select-Object -First 3) -join ' | '
+    $items.Add((Write-Item WARN 'stub' "possible stub markers in added lines: $sample")) | Out-Null
+  }
+  else {
+    $items.Add((Write-Item PASS 'stub' 'no stub markers in added lines')) | Out-Null
+  }
+
+  # 4. Test weakening (F07) — staged + unstaged
+  $testDeleteHits = @($deleted | Where-Object { $_ -match '(?i)(test|spec|Tests)' })
+  $skipHits = @()
+  foreach ($line in $addedLines) {
+    if ($line -match 'Skip\s*=\s*\$true' -or $line -match 'it\.skip' -or $line -match 'describe\.skip' -or $line -match '@pytest\.mark\.skip') {
+      $skipHits += $line.Trim()
+    }
+  }
+
+  if ($testDeleteHits.Count -gt 0 -or $skipHits.Count -gt 0) {
+    $msgParts = @()
+    if ($testDeleteHits.Count -gt 0) { $msgParts += "deleted test-like paths: $($testDeleteHits -join ', ')" }
+    if ($skipHits.Count -gt 0) { $msgParts += "skip markers: $(($skipHits | Select-Object -First 3) -join ' | ')" }
+    $msg = $msgParts -join '; '
+    if ($AcceptTestChanges) {
+      $items.Add((Write-Item PASS 'f07:tests' "accepted via -AcceptTestChanges: $msg")) | Out-Null
+    }
+    else {
+      $items.Add((Write-Item FAIL 'f07:tests' "$msg (use -AcceptTestChanges to override)")) | Out-Null
+      $fail = $true
+    }
+  }
+  else {
+    $items.Add((Write-Item PASS 'f07:tests' 'no test deletion or skip markers detected')) | Out-Null
+  }
 }
 
 # 5. Summary

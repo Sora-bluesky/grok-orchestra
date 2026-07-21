@@ -13,7 +13,8 @@ Describe 'check.ps1' {
   }
 
   It 'clean locks report OK/WARN only and exit 0' {
-    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot *>&1
+    # -SkipToolCheck keeps lock/SSOT tests independent of host codex install
+    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -SkipToolCheck *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Not -Match '\[FAIL\]'
   }
@@ -27,7 +28,7 @@ started=2026-01-01T00:00:00
 pid=999999
 "@ | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
-    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot *>&1
+    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -SkipToolCheck *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'stale pid=999999'
     Test-Path -LiteralPath $lockPath | Should -BeTrue
@@ -42,7 +43,7 @@ started=2026-01-01T00:00:00
 pid=999999
 "@ | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
-    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -Fix *>&1
+    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -SkipToolCheck -Fix *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'removed'
     Test-Path -LiteralPath $lockPath | Should -BeFalse
@@ -56,7 +57,7 @@ type=implement
 started=2026-01-01T00:00:00
 "@ | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
-    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -Fix *>&1
+    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -SkipToolCheck -Fix *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'legacy lock without pid='
     Test-Path -LiteralPath $lockPath | Should -BeTrue
@@ -71,7 +72,7 @@ started=2026-01-01T00:00:00
       acquired_at = '2026-01-01T00:00:00'
     } | ConvertTo-Json | Set-Content -LiteralPath $leasePath -Encoding UTF8
 
-    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -Fix *>&1
+    $output = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:RepoRoot -SkipToolCheck -Fix *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'status=stale'
     $lease = Get-Content -LiteralPath $leasePath -Raw -Encoding UTF8 | ConvertFrom-Json

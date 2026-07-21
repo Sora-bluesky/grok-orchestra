@@ -8,12 +8,15 @@
   Override locks directory (default: <repo>/.agents/locks). Tests inject $TestDrive here.
 .PARAMETER RepoRoot
   Override repository root (default: parent of scripts/).
+.PARAMETER SkipToolCheck
+  Skip codex presence check (unit tests / offline CI only).
 #>
 [CmdletBinding()]
 param(
   [switch] $Fix,
   [string] $LockDir = '',
-  [string] $RepoRoot = ''
+  [string] $RepoRoot = '',
+  [switch] $SkipToolCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,16 +44,21 @@ if ([string]::IsNullOrWhiteSpace($LockDir)) {
 $results = [System.Collections.Generic.List[object]]::new()
 
 # 1. Tool presence (same priority as delegate-codex Resolve-CodexNodeInvocation)
-$npmCodex = Join-Path $env:APPDATA 'npm\node_modules\@openai\codex\bin\codex.js'
-$codexCmd = Get-Command codex -ErrorAction SilentlyContinue
-if (Test-Path -LiteralPath $npmCodex) {
-  $results.Add((Write-CheckResult OK 'tool:codex' "npm codex.js present: $npmCodex")) | Out-Null
-}
-elseif ($codexCmd) {
-  $results.Add((Write-CheckResult OK 'tool:codex' "codex on PATH: $($codexCmd.Source)")) | Out-Null
+if ($SkipToolCheck) {
+  $results.Add((Write-CheckResult OK 'tool:codex' 'skipped (-SkipToolCheck)')) | Out-Null
 }
 else {
-  $results.Add((Write-CheckResult FAIL 'tool:codex' 'Neither npm codex.js nor codex on PATH found')) | Out-Null
+  $npmCodex = Join-Path $env:APPDATA 'npm\node_modules\@openai\codex\bin\codex.js'
+  $codexCmd = Get-Command codex -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $npmCodex) {
+    $results.Add((Write-CheckResult OK 'tool:codex' "npm codex.js present: $npmCodex")) | Out-Null
+  }
+  elseif ($codexCmd) {
+    $results.Add((Write-CheckResult OK 'tool:codex' "codex on PATH: $($codexCmd.Source)")) | Out-Null
+  }
+  else {
+    $results.Add((Write-CheckResult FAIL 'tool:codex' 'Neither npm codex.js nor codex on PATH found')) | Out-Null
+  }
 }
 
 # 2. SSOT layout

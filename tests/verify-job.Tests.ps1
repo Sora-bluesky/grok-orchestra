@@ -69,4 +69,23 @@ Describe 'verify-job.ps1' {
     $text | Should -Match '\[WARN\] stub'
     $text | Should -Match 'verify-job: PASS'
   }
+
+  It 'fails on invalid BaseRef instead of false PASS' {
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -BaseRef 'definitely-not-a-ref-xyz' *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'verify-job: FAIL'
+  }
+
+  It 'rejects option-shaped BaseRef (injection guard)' {
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -BaseRef '--output=/tmp/x' *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'git option|BaseRef'
+  }
+
+  It 'fails when untracked path escapes OwnedPaths' {
+    Set-Content -LiteralPath (Join-Path $script:Repo 'outside.txt') -Value 'leak' -Encoding UTF8
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('src') *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'outside owned_paths'
+  }
 }
