@@ -1,9 +1,9 @@
 # HANDOFF — grok-orchestra
 
 **Updated:** 2026-07-21  
-**From:** Grok Build plan session @ `_playground`  
-**Repo:** `C:\Users\komei\Documents\Projects\apps\grok-orchestra`  
-**State:** Phase 0–1 bootstrap applied (continue from smoke / remaining polish)
+**From:** Grok operator session  
+**Repo:** `grok-orchestra` (local clone of this tree)  
+**State:** Phase 0–2 complete (workflow skills + L1 lease foundation)
 
 ## Mission
 
@@ -127,8 +127,8 @@ Implement: `-Sandbox workspace-write` (or `-s workspace-write`). L2: `-C .agents
 - [x] Smoke read-only review (`smoke-001`, exit 0, last.txt written)
 
 ### Phase 2
-- [ ] startproject, plan, tdd, simplify, checkpointing, init, design-tracker
-- [ ] L1 owned_paths leases
+- [x] startproject, plan, tdd, simplify, checkpointing, init, design-tracker
+- [x] L1 owned_paths leases (`scripts/lease-paths.ps1` + isolation schema)
 
 ### Phase 3
 - [ ] optional MCP, hooks, check.ps1, worktree helper
@@ -142,21 +142,15 @@ Implement: `-Sandbox workspace-write` (or `-s workspace-write`). L2: `-C .agents
 
 ## Next actions
 
-1. Confirm cwd is this repo.
-2. Run smoke: `.\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt`
-3. Read `.agents\logs\codex\smoke-001.last.txt` and confirm non-empty.
-4. Commit bootstrap if smoke passes.
-5. Phase 2 workflows only after smoke green.
+1. Use workflow skills as needed (`init` / `startproject` / `plan` / …).
+2. For write jobs with path ownership: `.\scripts\lease-paths.ps1` or `delegate-codex.ps1 -OwnedPaths …`.
+3. Phase 3 optional: MCP, hooks, `check.ps1`, L2 worktree helper.
 
 ## Session start prompt
 
 ```text
-cwd: C:\Users\komei\Documents\Projects\apps\grok-orchestra
-Read HANDOFF.md and AGENTS.md. Continue from Phase 1 smoke if not done, then Phase 2.
+cwd: <path-to-grok-orchestra>
+Read HANDOFF.md and AGENTS.md. Continue from Phase 2 / Phase 3 checklist.
 Grok=operator; Codex=only worker. No Claude Code worker.
 Failure modes F01-F20 are requirements. Done = verify-job, not worker prose.
 ```
-
-## Plan file (playground session)
-
-`C:\Users\komei\.grok\sessions\C%3A%5CUsers%5Ckomei%5CDocuments%5CProjects%5Capps%5C_playground\019f8384-79be-79b1-aa99-260d81ad6784\plan.md`

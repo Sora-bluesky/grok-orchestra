@@ -89,6 +89,13 @@ Required catalog: `.agents/docs/failure-modes.md` (F01–F20).
 - `context-loader` — load STATE + DESIGN + active task only  
 - `codex-system` — delegate via `scripts/delegate-codex.ps1`  
 - `verify-job` — post-implement gate  
+- `init` — place or verify the file SSOT safely  
+- `startproject` — run the six-phase project kickoff  
+- `plan` — produce a read-only, approval-gated plan  
+- `tdd` — run a verified red-green-refactor chain  
+- `simplify` — audit first, then apply an optional bounded fix  
+- `checkpointing` — synchronize STATE, PROGRESS, and HANDOFF  
+- `design-tracker` — maintain design decisions and review evidence  
 
 ## Language
 

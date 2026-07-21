@@ -8,8 +8,11 @@ auth.json
 # Orchestra runtime
 .agents/logs/codex/*.last.txt
 .agents/logs/codex/*.stderr.log
+.agents/logs/codex/*.combined.log
 .agents/logs/codex/*.jsonl
 .agents/worktrees/
+.agents/locks/write-job.lock
+.agents/locks/*.lease.json
 .agents/locks/leases.json
 
 # Keep structure

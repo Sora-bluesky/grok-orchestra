@@ -16,7 +16,19 @@ grok-orchestra is a template harness: Grok operates; Codex executes specialized 
 
 See `docs/architecture.md` and root `AGENTS.md`.
 
+## Isolation
+
+| Level | Status | Mechanism |
+|-------|--------|-----------|
+| L0 | Default | `write-job.lock` via `delegate-codex.ps1` |
+| L1 | Foundation (Phase 2) | `.agents/locks/{job_id}.lease.json` + `scripts/lease-paths.ps1` |
+| L2 | Later (Phase 3) | Optional git worktree per job |
+
+## Workflow skills (Phase 2)
+
+`init` → `startproject` → `plan` → (`tdd` / implement) → `simplify` → `checkpointing`; design decisions tracked by `design-tracker`.
+
 ## Open design questions
 
-- Phase 2: which workflow skills to port first after smoke
 - Phase 3: whether MCP `codex mcp-server` adds value over CLI
+- Phase 3: optional hooks / `check.ps1` / worktree helper

@@ -27,7 +27,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string] $PromptFile,
 
-  [string] $RepoRoot = ''
+  [string] $RepoRoot = '',
+
+  [string[]] $OwnedPaths = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +76,8 @@ $lockDir = Join-Path $root '.agents\locks'
 New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
 $writeLock = Join-Path $lockDir 'write-job.lock'
 $isWrite = $Type -in @('implement', 'fix')
+$leaseAcquired = $false
+$leaseScript = Join-Path $root 'scripts\lease-paths.ps1'
 
 if ($isWrite) {
   if (Test-Path -LiteralPath $writeLock) {
@@ -108,6 +112,12 @@ if ($inv.ArgsPrefix.Count -eq 0) {
 $argList += @('-C', $root, '-s', $sandbox, '-o', $outLast)
 
 try {
+  if ($isWrite -and $OwnedPaths.Count -gt 0) {
+    & $leaseScript -Action acquire -JobId $JobId -OwnedPaths $OwnedPaths -Type $Type
+    if ($LASTEXITCODE -ne 0) { throw "L1 lease acquire failed for job: $JobId" }
+    $leaseAcquired = $true
+  }
+
   $env:NO_COLOR = '1'
   # Capture all streams; do not use 2> file redirect with ErrorAction Stop
   $prevEap = $ErrorActionPreference
@@ -137,6 +147,10 @@ try {
   exit 0
 }
 finally {
+  if ($leaseAcquired) {
+    try { & $leaseScript -Action release -JobId $JobId | Out-Host }
+    catch { Write-Warning "L1 lease release failed for job '$JobId': $($_.Exception.Message)" }
+  }
   if ($isWrite -and (Test-Path -LiteralPath $writeLock)) {
     $lockContent = Get-Content -LiteralPath $writeLock -Raw -ErrorAction SilentlyContinue
     if ($lockContent -match [regex]::Escape("job_id=$JobId")) {

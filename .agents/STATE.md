@@ -4,14 +4,14 @@
 |-----|--------|
 | active_main | grok |
 | worker | codex |
-| phase | 1-mvp |
-| isolation_default | L0 |
-| last_job_id | smoke-001 |
-| last_job_status | success (read-only review, exit 0, last.txt 1445 bytes) |
-| notes | Phase 1 smoke green; next Phase 2 workflows or commit polish |
+| phase | 2-workflows |
+| isolation_default | L0 (+ L1 lease foundation) |
+| last_job_id | phase2-001 |
+| last_job_status | success (Operator verified; Codex hung after file writes — Operator completed INDEX/HANDOFF/PROGRESS/DESIGN) |
+| notes | Phase 2 skills + L1 lease helper in tree; next Phase 3 or public polish |
 
 ## Working focus
 
 - Keep Operator context thin.
 - Prefer file packets over chat memory.
-- Do not start Phase 2 workflows until smoke passes.
+- L0 single-writer default; use `scripts/lease-paths.ps1` when declaring `owned_paths`.

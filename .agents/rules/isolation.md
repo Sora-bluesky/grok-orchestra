@@ -9,10 +9,13 @@
 
 ## L1 — File-ownership leases (Phase 2)
 
-- Each write job declares `owned_paths[]`.
-- Overlapping leases with `status=running` → refuse spawn.
-- Same pattern as Claude Code Orchestra `team-execute` file ownership.
-- **Not** git worktrees.
+- L0 `write-job.lock` remains the single-writer default. L1 adds ownership data for possible later parallel writers; the Operator still uses L0 today.
+- Each write job declares `owned_paths` and stores `.agents/locks/{job_id}.lease.json`.
+- Schema: `job_id`, `owned_paths` (string array), `status` (`running` or `released`), `acquired_at` (ISO-8601), and optional `type`.
+- Normalize paths to repo-relative separators (`/` or `\`) before comparison.
+- Overlap means exact match or a path-prefix match at a separator boundary.
+- If any lease with `status=running` overlaps a requested path, refuse spawn.
+- Use `scripts/lease-paths.ps1 -Action acquire|check|release`; L1 is file ownership, not git worktrees.
 
 ## L2 — Git worktree per job (Phase 3, optional)
 

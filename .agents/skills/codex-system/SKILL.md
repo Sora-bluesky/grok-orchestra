@@ -19,6 +19,8 @@ description: Delegate design, review, debug, or implement work to Codex CLI via 
 5. If type is `implement` or `fix`, run **verify-job**.
 6. Update `.agents/STATE.md`.
 
+For L1, declare `owned_paths` in the packet and pass `-OwnedPaths` for `implement` or `fix`. The wrapper calls `scripts/lease-paths.ps1` before spawn and releases the lease afterward. Empty `OwnedPaths` keeps L0-only behavior.
+
 ## Types → sandbox
 
 | Type | Sandbox |
