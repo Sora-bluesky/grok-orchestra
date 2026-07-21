@@ -62,6 +62,8 @@ Merge carefully…」)で、LLM か人間の慎重な手作業に全面依存し
 - `tests/install.Tests.ps1`(create)
 - `README.md` / `README.ja.md`(Quick start に installer 節を追記 — 既存節の書き換えはしない)
 - `.agents/skills/init/SKILL.md`(「another project」節の冒頭に installer 参照を 1 行追記)
+- `plans/README.md`(本プランの status 行のみ)
+- `plans/003-one-command-installer.md`(Done criteria チェック反映のみ)
 
 **Out of scope**:
 - `irm | iex` のリモートワンライナー配布(署名・供給網の設計が必要 — 将来プラン)
@@ -84,7 +86,12 @@ Merge carefully…」)で、LLM か人間の慎重な手作業に全面依存し
 
 1. 検証: `$Target` が存在し、このリポジトリ自身(`$PSScriptRoot\..`)と同一パスでないこと。
 2. コピー(コピー元はこのリポジトリのツリー):
-   - `.agents/` 一式。ただし `STATE.md` と、`logs/` `locks/` 配下の `.gitkeep` 以外は除外
+   - `.agents/` 一式。ただし次は除外:
+     - `STATE.md`
+     - `logs/` `locks/` 配下の `.gitkeep` 以外
+     - **`.agents/docs/packets/smoke-001.prompt.txt`**(Step 5 で導入先専用を生成する。
+       ソースの grok-orchestra 向け packet を bulk copy すると、既定の非上書きと衝突し
+       `fixtures/sample.txt` 参照のまま残る — PR #8 Codex review P2)
    - `scripts/delegate-codex.ps1`, `scripts/lease-paths.ps1`, `scripts/check.ps1`,
      `scripts/verify-job.ps1`(存在するもののみ)
    - `.codex/AGENTS.md`, `.grok/rules/`
@@ -92,9 +99,11 @@ Merge carefully…」)で、LLM か人間の慎重な手作業に全面依存し
    「既存 AGENTS.md と手動マージせよ(優先順位は init skill 参照)」と stdout で明示。
 4. `.gitignore`: 無ければ本リポジトリの Orchestra 関連ブロック(上記 Current state 参照)を
    マーカーコメント付きで生成。在れば同ブロックが未含有の場合のみ**末尾追記**(重複追記しない)。
-5. smoke packet: `.agents/docs/packets/smoke-001.prompt.txt` を導入先に生成し、
+5. smoke packet: **bulk copy せず**、導入先専用の
+   `.agents/docs/packets/smoke-001.prompt.txt` を生成する。
    `## Relevant files` / `## Acceptance checks` 内の grok-orchestra 固有パス
-   (`fixtures/` 等)を「導入先で書き換えよ」と TODO マーカー付きに置換する。
+   (`fixtures/` 等)は「導入先で書き換えよ」と TODO マーカー付きにする。
+   導入先に既に同 path がある場合は既定どおり skip(上書きは `-Force` のみ)。
 6. `STATE.example.md` はコピーするが `STATE.md` の seed は行わない(stdout で
    `Copy-Item .agents\STATE.example.md .agents\STATE.md` を案内)。
 7. 終了時に次アクション(smoke 実行コマンド、check.ps1 があればその実行)を stdout に列挙。
@@ -113,10 +122,11 @@ Merge carefully…」)で、LLM か人間の慎重な手作業に全面依存し
 
 ### Step 3: tests/install.Tests.ps1 を書く
 
-`$TestDrive` を Target にして最低 6 ケース:
+`$TestDrive` を Target にして最低 7 ケース:
 空ディレクトリへの導入 / 2 回目の冪等性 / 既存 AGENTS.md 非破壊 /
 既存 .gitignore への追記(1 回だけ) / `-DryRun` が書き込みゼロ /
-Target がリポジトリ自身のとき拒否。
+Target がリポジトリ自身のとき拒否 /
+空 Target で生成された `smoke-001.prompt.txt` が `fixtures/sample.txt` を参照しないこと。
 
 **Verify**: `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0`
 

@@ -6,23 +6,33 @@ param(
   [string] $Action,
   [string] $JobId = '',
   [string[]] $OwnedPaths = @(),
-  [string] $Type = ''
+  [string] $Type = '',
+  [string] $LockDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$lockDir = Join-Path $repoRoot '.agents\locks'
+if ([string]::IsNullOrWhiteSpace($LockDir)) { $LockDir = Join-Path $repoRoot '.agents\locks' }
+$lockDir = $LockDir
 New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
 
 function ConvertTo-OwnedPath {
   param([string] $Path)
   if ([string]::IsNullOrWhiteSpace($Path)) { throw 'owned_paths must not contain empty paths.' }
   if ([System.IO.Path]::IsPathRooted($Path)) { throw "owned_paths must be repo-relative: $Path" }
-  $normalized = $Path.Trim().Replace('\', '/').TrimStart('.', '/')
-  if (-not $normalized -or $normalized -eq '..' -or $normalized.StartsWith('../')) {
+  # Normalize separators only. Do not TrimStart('.') — that collapses "../x" to "x"
+  # and would strip a legitimate leading-dot segment such as ".agents".
+  $normalized = $Path.Trim().Replace('\', '/')
+  while ($normalized.StartsWith('./')) { $normalized = $normalized.Substring(2) }
+  $normalized = $normalized.TrimStart('/')
+  if (-not $normalized) {
     throw "owned_paths must stay inside the repository: $Path"
   }
-  return $normalized.TrimEnd('/').ToLowerInvariant()
+  $segments = @($normalized -split '/' | Where-Object { $_ -ne '' -and $_ -ne '.' })
+  if ($segments.Count -eq 0 -or ($segments | Where-Object { $_ -eq '..' })) {
+    throw "owned_paths must stay inside the repository: $Path"
+  }
+  return ($segments -join '/').ToLowerInvariant()
 }
 
 function Test-PathOverlap {

@@ -1,0 +1,22 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck
+      - name: Run tests
+        shell: pwsh
+        run: |
+          $r = Invoke-Pester -Path tests -PassThru -Output Detailed
+          if ($null -eq $r) { Write-Error 'Invoke-Pester returned null'; exit 1 }
+          if ($r.Result -ne 'Passed' -or $r.FailedCount -gt 0 -or $r.TotalCount -lt 9) {
+            Write-Error "Pester failed: Result=$($r.Result) Total=$($r.TotalCount) Failed=$($r.FailedCount)"
+            exit 1
+          }
