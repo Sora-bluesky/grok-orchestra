@@ -89,10 +89,10 @@
 | Codex 認証 | `codex login` | 対応 ChatGPT プランまたは API キー |
 | Pester 5+(任意) | `Invoke-Pester -?` | ハーネス自身のテストを回す場合のみ |
 
-環境をまとめて診断するには doctor を実行:
+ハーネス環境の診断(Codex CLI の存在・SSOT レイアウト・ステールロック・gitignore 整合。Git/Grok/Pester は上の表の方法で個別確認)には doctor を実行:
 
 ```powershell
-.\scripts\check.ps1        # ツール、SSOT レイアウト、ステールロック、gitignore 整合
+.\scripts\check.ps1        # codex、SSOT レイアウト、ステールロック、gitignore 整合
 .\scripts\check.ps1 -Fix   # 加えて、ステールと証明できたロック/リースを掃除
 ```
 

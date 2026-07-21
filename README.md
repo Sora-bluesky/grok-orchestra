@@ -89,10 +89,10 @@ Three things set this harness apart:
 | Codex auth | `codex login` | A supported ChatGPT plan or API key |
 | Pester 5+ (optional) | `Invoke-Pester -?` | Only needed to run the harness's own test suite |
 
-To diagnose the whole environment at once, run the doctor:
+To diagnose the harness environment (Codex CLI presence, SSOT layout, stale locks, gitignore hygiene — Git/Grok/Pester are checked per the table above), run the doctor:
 
 ```powershell
-.\scripts\check.ps1        # tools, SSOT layout, stale locks, gitignore hygiene
+.\scripts\check.ps1        # codex, SSOT layout, stale locks, gitignore hygiene
 .\scripts\check.ps1 -Fix   # additionally clean provable-stale locks/leases
 ```
 
