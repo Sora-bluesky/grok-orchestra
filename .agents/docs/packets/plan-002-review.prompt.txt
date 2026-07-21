@@ -1,0 +1,35 @@
+## Objective
+Review Plan 002 implementation (check.ps1, verify-job.ps1, delegate PID/exec simplify) for correctness, F10 (judge-only), staged-diff coverage, and test quality. Do not modify files.
+
+## Constraints
+- read-only; do not modify any files
+- Do not run network tools
+- Do not invoke codex recursively
+- Respond in Japanese
+- Keep the whole answer under 90 lines
+- Focus only on Relevant files
+
+## Relevant files
+- scripts/check.ps1
+- scripts/verify-job.ps1
+- scripts/delegate-codex.ps1
+- tests/check.Tests.ps1
+- tests/verify-job.Tests.ps1
+- .agents/skills/verify-job/SKILL.md
+- .agents/docs/DESIGN.md
+- plans/002-mechanize-verify-and-doctor.md
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES
+- Explicitly judge: verify-job never commits/merges/auto-fixes (F10)
+- Explicitly judge: staged + unstaged test deletion both fail
+- List concrete defects with file:line or file + symptom if any
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks

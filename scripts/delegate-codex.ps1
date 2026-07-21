@@ -88,6 +88,7 @@ if ($isWrite) {
 job_id=$JobId
 type=$Type
 started=$(Get-Date -Format o)
+pid=$PID
 "@ | Set-Content -LiteralPath $writeLock -Encoding UTF8
 }
 
@@ -104,11 +105,7 @@ Write-Host "delegate-codex: job=$JobId type=$Type sandbox=$sandbox cwd=$root"
 $inv = Resolve-CodexNodeInvocation
 $argList = @()
 $argList += $inv.ArgsPrefix
-if ($inv.ArgsPrefix.Count -eq 0) {
-  $argList += 'exec'
-} else {
-  $argList += 'exec'
-}
+$argList += 'exec'
 $argList += @('-C', $root, '-s', $sandbox, '-o', $outLast)
 
 try {

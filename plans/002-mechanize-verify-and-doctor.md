@@ -171,12 +171,12 @@ Step 4 の 2 ファイル。パターンは Plan 001 の `tests/lease-paths.Test
 
 ## Done criteria
 
-- [ ] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0`
-- [ ] `.\scripts\check.ps1` がクリーン環境で exit 0
-- [ ] `.\scripts\verify-job.ps1 -JobId x -SkipLog` が変更ゼロ tree で PASS
-- [ ] delegate-codex.ps1 の diff が「pid 追加」と「if/else 簡約」の 2 点のみ
-- [ ] `git status` で in-scope 外の変更が無い
-- [ ] `plans/README.md` の status 更新
+- [x] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0` (23 Passed, 2026-07-21)
+- [x] `.\scripts\check.ps1` がクリーン環境で exit 0
+- [x] `.\scripts\verify-job.ps1 -JobId x -SkipLog` が変更ゼロ tree で PASS
+- [x] delegate-codex.ps1 の diff が「pid 追加」と「if/else 簡約」の 2 点のみ
+- [x] `git status` で in-scope 外の変更が無い
+- [x] `plans/README.md` の status 更新
 
 ## STOP conditions
 
