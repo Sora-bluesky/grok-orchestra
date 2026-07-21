@@ -21,28 +21,44 @@
 
 ## クイックスタート
 
+このリポジトリは **ハーネス用テンプレート** です。読むのは **このツリー内の契約** です。別プロジェクトの `HANDOFF.md` や、別リポの `AGENTS.md` を前提にしないでください。
+
 ```powershell
 cd path\to\grok-orchestra
+# 任意: このワークスペース用のローカル状態
+Copy-Item .agents\STATE.example.md .agents\STATE.md
 grok
 ```
 
+Grok への最初のメッセージ例:
+
 ```text
-AGENTS.md と .agents/STATE.md を読む（無ければ STATE.example.md から作成）
+あなたはこの grok-orchestra ワークスペースのオペレーターです。
+./AGENTS.md と ./.agents/skills/ の契約に従ってください。
+HANDOFF.md は探さないでください（ローカル任意。公開テンプレの一部ではありません）。
+.agents/STATE.md が無ければ .agents/STATE.example.md から作ってください。
+トポロジと次の安全な一手を10行以内で要約してください。
 ```
 
-スモーク（Codex read-only レビュー）:
+スモーク（このリポ上での Codex read-only レビュー）:
 
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
 
-ローカル専用（gitignore。必要に応じて作成）:
+### 別プロジェクトに組み込む場合
 
-| ファイル | 用途 |
-|----------|------|
-| `HANDOFF.md` | セッション引き継ぎ |
-| `PROGRESS.md` | 日付付き進捗ログ |
-| `.agents/STATE.md` | フェーズ / 最終 job（雛形: `.agents/STATE.example.md`） |
+1. `.agents/`・`scripts/`・ルート契約の型を対象アプリへコピーまたは submodule する  
+2. 既にある `AGENTS.md` とは **慎重にマージ**する（優先順位: ユーザー指示 → active packet → このハーネス契約）  
+3. セッション継続用ファイルを使うなら **ローカル専用** にする:
+
+| ファイル | 公開? | 用途 |
+|----------|-------|------|
+| このリポの `AGENTS.md` | 追跡 | *この* ハーネスのオペレーター契約 |
+| `.agents/STATE.example.md` | 追跡 | ローカル状態の雛形 |
+| `.agents/STATE.md` | gitignore | フェーズ / 最終 job（任意） |
+| `PROGRESS.md` | gitignore | 日付付きログ（任意） |
+| `HANDOFF.md` | gitignore | 引き継ぎ（任意・メンテ用） |
 
 ## 隔離
 
