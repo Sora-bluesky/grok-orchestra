@@ -107,7 +107,7 @@ junction 経由の自己 Target が拒否されるテスト。junction 作成不
 - [ ] 非 ASCII / 先頭スペースのファイル名が verify-job で正しいパスとして扱われる
 - [ ] 1 MB 超 untracked で WARN スキップ
 - [ ] junction 自己 Target が拒否される(または環境理由の明示 Skip)
-- [ ] deferred 台帳 4 行が RESOLVED、README の既知制限を更新
+- [ ] deferred 台帳 4 行が RESOLVED(README は対象記述なしのため変更不要)
 - [ ] `git status` で in-scope 外の変更なし
 
 ## STOP conditions
