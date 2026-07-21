@@ -26,30 +26,44 @@ grok models   # or grok --version
 
 ## Quick start
 
+This repository is a **harness template**. Use the contract files **in this tree** — not a `HANDOFF.md` from another project, and not another repo’s `AGENTS.md`.
+
 ```powershell
 cd path\to\grok-orchestra
+# optional local state for this workspace only:
+Copy-Item .agents\STATE.example.md .agents\STATE.md
 grok
 ```
 
-Then:
+First message to Grok (example):
 
 ```text
-Read AGENTS.md and .agents/STATE.md (create from STATE.example.md if missing).
+You are the operator for this grok-orchestra workspace.
+Follow the contract in ./AGENTS.md and skills under ./.agents/skills/.
+Do not look for HANDOFF.md (local/optional; not part of the public template).
+If .agents/STATE.md is missing, seed it from .agents/STATE.example.md.
+Summarize topology and next safe action in under 10 lines.
 ```
 
-Smoke (Codex read-only review):
+Smoke (Codex read-only review from this repo):
 
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
 
-Local-only session files (gitignored; create as needed):
+### Using this harness inside another project
 
-| File | Purpose |
-|------|---------|
-| `HANDOFF.md` | Operator continuity across sessions |
-| `PROGRESS.md` | Dated progress log |
-| `.agents/STATE.md` | Active phase / last job (seed: `.agents/STATE.example.md`) |
+1. Copy or submodule the `.agents/`, `scripts/`, and root contract pattern into the target app.  
+2. **Merge carefully** with that app’s existing `AGENTS.md` (priority: user instruction → active packet → this harness contract).  
+3. Keep session continuity files **local-only** if you use them:
+
+| File | Public? | Purpose |
+|------|---------|---------|
+| `AGENTS.md` (this repo) | Tracked | Tool-neutral operator contract for *this* harness |
+| `.agents/STATE.example.md` | Tracked | Seed for local state |
+| `.agents/STATE.md` | gitignored | Live phase / last job (optional) |
+| `PROGRESS.md` | gitignored | Dated log (optional) |
+| `HANDOFF.md` | gitignored | Operator continuity (optional; maintainers only) |
 
 ## Roles
 
@@ -69,14 +83,14 @@ Local-only session files (gitignored; create as needed):
 ## Layout
 
 ```text
-AGENTS.md                      # Always-loaded contract
+AGENTS.md                      # Public harness contract (this repo)
 .agents/                       # SSOT: rules, skills, docs, logs
-.agents/STATE.example.md       # Seed for local STATE.md
+.agents/STATE.example.md       # Seed for optional local STATE.md
 .grok/rules/                   # Grok-native thin rules
-.codex/AGENTS.md               # Worker-facing contract
+.codex/AGENTS.md               # Worker-facing contract for Codex in this tree
 scripts/delegate-codex.ps1
 scripts/lease-paths.ps1
-# Local only (gitignored): HANDOFF.md, PROGRESS.md, .agents/STATE.md
+# Optional local only (gitignored): HANDOFF.md, PROGRESS.md, .agents/STATE.md
 ```
 
 ## License
