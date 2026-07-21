@@ -6,7 +6,7 @@
 
 マルチエージェント開発ハーネスです。ユーザーが話す相手は **Grok だけ**。**Codex** は設計・レビュー・深いデバッグを既定で担当します。実装の既定は Grok、完了判定（verify）も Grok です。
 
-[Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を参照しています（Claude Code をワーカーにはしません）。
+[Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を参照しています。
 
 ## なぜ
 

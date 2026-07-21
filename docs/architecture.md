@@ -4,7 +4,6 @@
 
 - **Grok** = Operator (Tier 1): user UI, default implementer, verify
 - **Codex CLI** = Worker (Tier 2 / sol): design, review, debug by default; implement only as exception
-- No Claude Code worker path
 
 ## Lineage
 

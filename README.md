@@ -6,7 +6,7 @@
 
 A multi-agent development harness: you talk only to **Grok**. **Codex** handles design, review, and deep debug by default. Grok implements by default and always owns verification.
 
-Inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) (concepts only — no Claude Code worker path).
+Inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra).
 
 ## Why
 
