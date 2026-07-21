@@ -119,6 +119,8 @@ function Test-ShouldExcludeAgentsPath {
 
   if ($norm -eq '.agents/STATE.md' -or $norm -eq 'agents/STATE.md') { return $true }
   if ($norm -eq '.agents/docs/packets/smoke-001.prompt.txt') { return $true }
+  # Live / local-only runtime trees (never ship into another app)
+  if ($norm -match '^\.agents/worktrees(/|$)') { return $true }
 
   # logs/locks: keep only .gitkeep
   if ($norm -match '^\.agents/(logs|locks)(/|$)') {
@@ -328,9 +330,12 @@ else {
       $copied++
     }
     else {
-      $nl = if ($existing.EndsWith("`n")) { '' } else { [Environment]::NewLine }
-      $merged = $existing + $nl + [Environment]::NewLine + $block + [Environment]::NewLine
-      Set-Content -LiteralPath $giDest -Value $merged -Encoding UTF8 -NoNewline
+      # Append only — do not rewrite the whole file (preserves encoding/BOM of the prefix).
+      $nl = [Environment]::NewLine
+      $prefix = if ($existing.Length -eq 0 -or $existing.EndsWith("`n") -or $existing.EndsWith("`r")) { '' } else { $nl }
+      $toAppend = $prefix + $nl + $block + $nl
+      $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+      [System.IO.File]::AppendAllText($giDest, $toAppend, $utf8NoBom)
       Write-InstallInfo '[append] .gitignore orchestra block'
       $copied++
     }

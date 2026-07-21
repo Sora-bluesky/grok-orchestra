@@ -31,17 +31,17 @@ Describe 'install.ps1' {
   It 'is idempotent on second run (skips, no byte change without -Force)' {
     & $script:InstallScript -Target $script:Target | Out-Null
     $sample = Join-Path $script:Target 'scripts\delegate-codex.ps1'
+    # Mutate so a silent overwrite would change content (hash would diverge).
+    Set-Content -LiteralPath $sample -Value 'MUTATED-BY-TEST-DO-NOT-OVERWRITE' -Encoding UTF8
     $before = Get-FileHash -LiteralPath $sample -Algorithm SHA256
-    $mtime = (Get-Item -LiteralPath $sample).LastWriteTimeUtc
 
-    Start-Sleep -Milliseconds 50
     $output = & $script:InstallScript -Target $script:Target *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match '\[skip\]'
 
     $after = Get-FileHash -LiteralPath $sample -Algorithm SHA256
     $after.Hash | Should -Be $before.Hash
-    (Get-Item -LiteralPath $sample).LastWriteTimeUtc | Should -Be $mtime
+    (Get-Content -LiteralPath $sample -Raw).Trim() | Should -Be 'MUTATED-BY-TEST-DO-NOT-OVERWRITE'
   }
 
   It 'does not overwrite existing AGENTS.md; writes AGENTS.grok-orchestra.md' {
@@ -56,14 +56,33 @@ Describe 'install.ps1' {
 
   It 'appends orchestra gitignore block only once' {
     $gi = Join-Path $script:Target '.gitignore'
-    Set-Content -LiteralPath $gi -Value "node_modules/`n" -Encoding UTF8
+    $prefix = "node_modules/`r`n# app-owned-marker-keep`r`n"
+    [System.IO.File]::WriteAllText($gi, $prefix, (New-Object System.Text.UTF8Encoding $false))
     & $script:InstallScript -Target $script:Target | Out-Null
-    $once = Get-Content -LiteralPath $gi -Raw
+    $once = [System.IO.File]::ReadAllText($gi)
     ($once -split 'grok-orchestra begin').Count | Should -Be 2
+    $once.StartsWith($prefix.TrimEnd("`r", "`n").Substring(0, 12)) | Should -BeTrue
+    $once | Should -Match 'app-owned-marker-keep'
 
     & $script:InstallScript -Target $script:Target | Out-Null
-    $twice = Get-Content -LiteralPath $gi -Raw
+    $twice = [System.IO.File]::ReadAllText($gi)
     ($twice -split 'grok-orchestra begin').Count | Should -Be 2
+    $twice | Should -Match 'app-owned-marker-keep'
+  }
+
+  It 'does not copy .agents/worktrees content' {
+    $wt = Join-Path $script:RepoRoot '.agents\worktrees\_install_test_sentinel'
+    New-Item -ItemType Directory -Force -Path $wt | Out-Null
+    $sentinel = Join-Path $wt 'should-not-copy.txt'
+    Set-Content -LiteralPath $sentinel -Value 'secret-worktree' -Encoding UTF8
+    try {
+      & $script:InstallScript -Target $script:Target | Out-Null
+      $leaked = Join-Path $script:Target '.agents\worktrees\_install_test_sentinel\should-not-copy.txt'
+      (Test-Path -LiteralPath $leaked) | Should -BeFalse
+    }
+    finally {
+      Remove-Item -LiteralPath $wt -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
 
   It 'DryRun writes nothing' {
