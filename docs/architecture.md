@@ -3,7 +3,7 @@
 ## Intent
 
 - **Grok** = Operator (Tier 1): user UI, default implementer, verify
-- **Codex CLI** = Worker (Tier 2 / sol): design, review, debug by default; implement only as exception
+- **Codex CLI** = Worker (Tier 2 / sol): design, review, investigate (diagnosis) by default; implement only as exception
 
 ## Lineage
 
@@ -17,7 +17,7 @@
 ```text
 User → Grok (orchestrate)
          ├─ implement (default) → optional Codex review → verify-job
-         └─ Codex read-only (design / review / debug)
+         └─ Codex read-only (design / review / investigate)
               └─ Codex workspace-write only as exception → verify-job
 ```
 

@@ -9,7 +9,8 @@ Inspired by Antigravity Orchestra role table; host = Grok.
 | Implement (default) | **Grok** |
 | Design / plan / trade-offs | **Codex** `read-only` |
 | Review / audit / QA | **Codex** `read-only` |
-| Debug (unknown root cause) | **Codex** `read-only` |
+| Investigate (unknown root cause → diagnosis + fix plan) | **Codex** `read-only` |
+| Apply fix after diagnosis | **Grok** (default write) |
 | Final verify / user dialogue | **Grok** |
 
 ## Grok owns
@@ -26,7 +27,7 @@ Inspired by Antigravity Orchestra role table; host = Grok.
 | Role | Tasks |
 |------|--------|
 | Designer | Architecture, implementation plan, trade-offs |
-| Debugger | Unknown root cause, complex bugs (returns diagnosis / plan) |
+| Investigator | Unknown root cause, complex bugs — **read-only** diagnosis + fix plan (not the patch) |
 | Auditor | Code review, TDD design critique, quality challenge |
 | Implementer (exception) | Only when Operator context would bloat, batch is unattended, or user forces it |
 

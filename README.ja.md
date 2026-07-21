@@ -4,14 +4,14 @@
 
 **Grok = オペレーター · Codex CLI = 専門ワーカー**
 
-マルチエージェント開発ハーネスです。ユーザーが話す相手は **Grok だけ**。**Codex** は設計・レビュー・深いデバッグを既定で担当します。実装の既定は Grok、完了判定（verify）も Grok です。
+マルチエージェント開発ハーネスです。話す相手は **Grok だけ**。**Codex** は設計・独立レビュー・原因調査を既定で担当します。**実装の既定は Grok**、完了判定（verify）も Grok です。
 
 [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を参照しています。
 
 ## なぜ
 
 - **単一 UI** — 触るのは Grok のみ
-- **役割分割** — Grok が実装、Codex が設計/レビュー/デバッグ（Codex 実装は例外）
+- **役割分割** — Grok が実装、Codex が計画・レビュー・原因調査（Codex がコードを書くのは例外）
 - **ファイル SSOT** — セッション共有なし。packet と docs が共有面
 - **失敗モードを設計で潰す** — コンテキスト汚染・二重書き込み・偽 done・コスト爆発など → [`.agents/docs/failure-modes.md`](.agents/docs/failure-modes.md)
 
@@ -30,8 +30,6 @@ grok models   # または grok --version
 
 ## クイックスタート
 
-このリポジトリを clone（または template 利用）し、**このツリー内**で作業してください。読む契約は **このリポの** `AGENTS.md` です。
-
 ```powershell
 git clone https://github.com/Sora-bluesky/grok-orchestra.git
 cd grok-orchestra
@@ -48,7 +46,7 @@ grok
 トポロジと次の安全な一手を10行以内で要約してください。
 ```
 
-### スモーク（Codex read-only）
+### スモーク
 
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
@@ -58,13 +56,18 @@ grok
 
 ## 役割
 
-| 役割 | 担当 |
-|------|------|
-| オーケストレーター、既定の **実装**、軽い調査、**verify** | Grok |
-| 設計、デバッグ、**監査・レビュー** | Codex（`read-only`） |
-| 実装（例外） | 親コンテキストが膨らむ・長時間バッチ・明示指定のときだけ Codex `workspace-write` |
+| 作業 | 担当 | モード |
+|------|------|--------|
+| オーケストレーション、実装（既定）、verify | **Grok** | 対話 |
+| 設計 / 計画 | **Codex** | `read-only` |
+| 原因調査（診断 + 修正方針） | **Codex** | `read-only` |
+| 独立レビュー / 監査 | **Codex** | `read-only` |
+| 診断後の修正適用 | **Grok**（既定） | write |
+| 大規模 / 長時間 / コンテキスト膨張の実装 | **Codex**（例外） | `workspace-write` |
 
-**目安:** Codex は疑う側、Grok は手を動かす側。非自明な Grok 実装のあとは Codex レビューしてから done。
+**目安:** Codex は疑う側・調査側、Grok は手を動かす側。非自明な Grok 実装のあとは Codex レビューしてから done。
+
+原因調査が **read-only** なのは意図的です。Codex は診断と修正方針を返し、パッチ適用は別ステップ（通常 Grok）にします。
 
 ## 隔離
 
@@ -72,20 +75,7 @@ grok
 |----|------|
 | **L0**（既定） | プロダクトコードの書き手は同時に1人（Grok **または** Codex） |
 | **L1** | `scripts/lease-paths.ps1` によるパス所有権 |
-| **L2**（任意・後続） | job ごとの git worktree |
-
-## 別プロジェクトに組み込む
-
-1. `.agents/`・`scripts/`・ルート `AGENTS.md`・必要なら `.codex/` / `.grok/` をコピーまたは submodule  
-2. 既存のエージェント契約と **慎重にマージ**（優先: ユーザー指示 → active packet → このハーネス契約）  
-3. ライブな作業状態を使うならローカル専用に:
-
-| パス | 追跡? | 用途 |
-|------|-------|------|
-| `AGENTS.md` | する | このハーネスのオペレーター契約 |
-| `.agents/STATE.example.md` | する | ローカル状態の雛形 |
-| `.agents/STATE.md` | しない | フェーズ / 最終 job |
-| `PROGRESS.md` | しない | 任意の日付付きログ |
+| **L2**（任意） | job ごとの git worktree |
 
 ## レイアウト
 
@@ -100,17 +90,20 @@ scripts/lease-paths.ps1
 docs/architecture.md
 ```
 
-## スキル（入口）
+任意の作業状態（gitignore）: `.agents/STATE.md`, `PROGRESS.md`。
+
+## スキル
 
 | スキル | 用途 |
 |--------|------|
 | `context-loader` | 最小コンテキスト読み込み |
-| `codex-system` | Codex 委譲（設計/レビュー/デバッグ。実装は例外） |
+| `codex-system` | Codex 委譲 |
 | `verify-job` | プロダクト書き込み後の完了ゲート |
-| `plan` | Codex 計画 → 承認後に実装 |
-| `tdd` | red → green → refactor（Grok 実装、Codex レビュー） |
-| `simplify` | Codex 監査 → 任意で Grok 修正 |
-| `init` / `startproject` / `checkpointing` / `design-tracker` | 立ち上げと継続 |
+| `plan` | Codex 計画 → 実装 |
+| `tdd` | red → green → refactor |
+| `simplify` | 監査 → 任意で修正 |
+| `init` | このハーネスをワークスペースへ載せる（別アプリツリー含む） |
+| `startproject` / `checkpointing` / `design-tracker` | 立ち上げと継続 |
 
 詳細: [`.agents/INDEX.md`](.agents/INDEX.md)
 
