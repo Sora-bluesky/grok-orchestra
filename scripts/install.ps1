@@ -41,31 +41,41 @@ function Resolve-ComparablePath {
   catch {
     return $Path.TrimEnd('\', '/').ToLowerInvariant()
   }
-  try {
-    if (Test-Path -LiteralPath $full) {
+  # Follow junction/symlink chain to a final non-link path (PS5.1: .Target; PS7+: ResolvedTarget).
+  # One-hop only was insufficient when -Target is a junction of a junction into the source root.
+  $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  $maxHops = 16
+  for ($hop = 0; $hop -lt $maxHops; $hop++) {
+    $key = $full.TrimEnd('\', '/').ToLowerInvariant()
+    if (-not $seen.Add($key)) { break } # cycle
+    try {
+      if (-not (Test-Path -LiteralPath $full)) { break }
       $item = Get-Item -LiteralPath $full -Force
-      # Follow junction/symlink when possible (PS5.1: .Target; PS7+: ResolvedTarget).
       $linkTarget = $null
       if ($item.PSObject.Properties['ResolvedTarget'] -and $item.ResolvedTarget) {
-        $linkTarget = [string]$item.ResolvedTarget
+        # ResolvedTarget is already fully resolved on PS7+; use once then stop.
+        $full = [System.IO.Path]::GetFullPath([string]$item.ResolvedTarget)
+        break
       }
       elseif ($item.LinkType -and $item.Target) {
         $t = $item.Target
         if ($t -is [System.Array]) { $t = $t[0] }
         $linkTarget = [string]$t
       }
-      if ($linkTarget) {
-        if (-not [System.IO.Path]::IsPathRooted($linkTarget)) {
-          $parent = if ($item.PSIsContainer) { $item.Parent.FullName } else { $item.DirectoryName }
-          if (-not $parent) { $parent = Split-Path -Parent $full }
-          $linkTarget = Join-Path $parent $linkTarget
-        }
-        $full = [System.IO.Path]::GetFullPath($linkTarget)
+      else {
+        break # not a link
       }
+      if (-not $linkTarget) { break }
+      if (-not [System.IO.Path]::IsPathRooted($linkTarget)) {
+        $parent = if ($item.PSIsContainer) { $item.Parent.FullName } else { $item.DirectoryName }
+        if (-not $parent) { $parent = Split-Path -Parent $full }
+        $linkTarget = Join-Path $parent $linkTarget
+      }
+      $full = [System.IO.Path]::GetFullPath($linkTarget)
     }
-  }
-  catch {
-    # Fall back to lexical full path.
+    catch {
+      break # Fall back to last lexical full path.
+    }
   }
   return $full.TrimEnd('\', '/').ToLowerInvariant()
 }

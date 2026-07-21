@@ -127,4 +127,30 @@ Describe 'install.ps1 junction self-target (plan 005)' {
       "$err" | Should -Match 'must not be this repository'
     }
   }
+
+  It 'rejects multi-hop junction chain into the repository root' {
+    # Codex P2 (PR #17 round 2): one-hop resolve missed junction→junction→repo.
+    $juncParent = Join-Path $TestDrive 'junc-chain'
+    New-Item -ItemType Directory -Force -Path $juncParent | Out-Null
+    $mid = Join-Path $juncParent 'mid'
+    $outer = Join-Path $juncParent 'outer'
+    try {
+      New-Item -ItemType Junction -Path $mid -Target $script:RepoRoot -ErrorAction Stop | Out-Null
+      New-Item -ItemType Junction -Path $outer -Target $mid -ErrorAction Stop | Out-Null
+    }
+    catch {
+      Set-ItResult -Skipped -Because "Junction creation not available in this environment: $($_.Exception.Message)"
+      return
+    }
+
+    $err = $null
+    try {
+      & $script:InstallScript -Target $outer 2>&1 | Out-Null
+    }
+    catch {
+      $err = $_
+    }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'must not be this repository'
+  }
 }
