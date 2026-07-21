@@ -88,6 +88,7 @@ if ($isWrite) {
 job_id=$JobId
 type=$Type
 started=$(Get-Date -Format o)
+pid=$PID
 "@ | Set-Content -LiteralPath $writeLock -Encoding UTF8
 }
 
