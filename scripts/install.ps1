@@ -33,10 +33,47 @@ function Get-SourceRoot {
   return (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 }
 
+function Resolve-ComparablePath {
+  param([string] $Path)
+  try {
+    $full = [System.IO.Path]::GetFullPath($Path)
+  }
+  catch {
+    return $Path.TrimEnd('\', '/').ToLowerInvariant()
+  }
+  try {
+    if (Test-Path -LiteralPath $full) {
+      $item = Get-Item -LiteralPath $full -Force
+      # Follow junction/symlink when possible (PS5.1: .Target; PS7+: ResolvedTarget).
+      $linkTarget = $null
+      if ($item.PSObject.Properties['ResolvedTarget'] -and $item.ResolvedTarget) {
+        $linkTarget = [string]$item.ResolvedTarget
+      }
+      elseif ($item.LinkType -and $item.Target) {
+        $t = $item.Target
+        if ($t -is [System.Array]) { $t = $t[0] }
+        $linkTarget = [string]$t
+      }
+      if ($linkTarget) {
+        if (-not [System.IO.Path]::IsPathRooted($linkTarget)) {
+          $parent = if ($item.PSIsContainer) { $item.Parent.FullName } else { $item.DirectoryName }
+          if (-not $parent) { $parent = Split-Path -Parent $full }
+          $linkTarget = Join-Path $parent $linkTarget
+        }
+        $full = [System.IO.Path]::GetFullPath($linkTarget)
+      }
+    }
+  }
+  catch {
+    # Fall back to lexical full path.
+  }
+  return $full.TrimEnd('\', '/').ToLowerInvariant()
+}
+
 function Test-SamePath {
   param([string] $Left, [string] $Right)
-  $l = [System.IO.Path]::GetFullPath($Left).TrimEnd('\', '/').ToLowerInvariant()
-  $r = [System.IO.Path]::GetFullPath($Right).TrimEnd('\', '/').ToLowerInvariant()
+  $l = Resolve-ComparablePath $Left
+  $r = Resolve-ComparablePath $Right
   return $l -eq $r
 }
 

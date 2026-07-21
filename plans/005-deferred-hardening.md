@@ -103,12 +103,12 @@ junction 経由の自己 Target が拒否されるテスト。junction 作成不
 
 ## Done criteria
 
-- [ ] Pester 全 green(新規テスト 4 ケース以上を含む)
-- [ ] 非 ASCII / 先頭スペースのファイル名が verify-job で正しいパスとして扱われる
-- [ ] 1 MB 超 untracked で WARN スキップ
-- [ ] junction 自己 Target が拒否される(または環境理由の明示 Skip)
-- [ ] deferred 台帳 4 行が RESOLVED(README は対象記述なしのため変更不要)
-- [ ] `git status` で in-scope 外の変更なし
+- [x] Pester 全 green(新規テスト 4 ケース以上を含む)
+- [x] 非 ASCII / 先頭スペースのファイル名が verify-job で正しいパスとして扱われる
+- [x] 1 MB 超 untracked で WARN スキップ
+- [x] junction 自己 Target が拒否される(または環境理由の明示 Skip)
+- [x] deferred 台帳 4 行が RESOLVED(README は対象記述なしのため変更不要)
+- [x] `git status` で in-scope 外の変更なし
 
 ## STOP conditions
 
