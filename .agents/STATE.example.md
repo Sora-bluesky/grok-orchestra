@@ -1,4 +1,6 @@
-# STATE
+# STATE (example seed)
+
+Copy to `.agents/STATE.md` (gitignored) and edit for your session.
 
 | Key | Value |
 |-----|--------|
@@ -6,9 +8,9 @@
 | worker | codex |
 | phase | 2-workflows |
 | isolation_default | L0 (+ L1 lease foundation) |
-| last_job_id | phase2-001 |
-| last_job_status | success (Operator verified; Codex hung after file writes — Operator completed INDEX/HANDOFF/PROGRESS/DESIGN) |
-| notes | Phase 2 skills + L1 lease helper in tree; next Phase 3 or public polish |
+| last_job_id | — |
+| last_job_status | — |
+| notes | Create local HANDOFF.md / PROGRESS.md as needed (also gitignored) |
 
 ## Working focus
 

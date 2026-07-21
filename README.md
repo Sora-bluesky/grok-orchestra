@@ -34,7 +34,7 @@ grok
 Then:
 
 ```text
-Read HANDOFF.md and AGENTS.md. Follow Phase checklist.
+Read AGENTS.md and .agents/STATE.md (create from STATE.example.md if missing).
 ```
 
 Smoke (Codex read-only review):
@@ -42,6 +42,14 @@ Smoke (Codex read-only review):
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
+
+Local-only session files (gitignored; create as needed):
+
+| File | Purpose |
+|------|---------|
+| `HANDOFF.md` | Operator continuity across sessions |
+| `PROGRESS.md` | Dated progress log |
+| `.agents/STATE.md` | Active phase / last job (seed: `.agents/STATE.example.md`) |
 
 ## Roles
 
@@ -55,18 +63,20 @@ Smoke (Codex read-only review):
 | Layer | Meaning |
 |-------|---------|
 | **L0** (default) | One writer; Operator freezes code edits during Codex implement |
-| **L1** (later) | File-ownership leases (CCO-style) |
+| **L1** | File-ownership leases via `scripts/lease-paths.ps1` |
 | **L2** (later) | Git worktree per job — optional, not CCO default |
 
 ## Layout
 
 ```text
-AGENTS.md                 # Always-loaded contract
-HANDOFF.md                # Session continuity
-.agents/                  # SSOT: STATE, rules, skills, docs, logs
-.grok/rules/              # Grok-native thin rules
-.codex/AGENTS.md          # Worker-facing contract
+AGENTS.md                      # Always-loaded contract
+.agents/                       # SSOT: rules, skills, docs, logs
+.agents/STATE.example.md       # Seed for local STATE.md
+.grok/rules/                   # Grok-native thin rules
+.codex/AGENTS.md               # Worker-facing contract
 scripts/delegate-codex.ps1
+scripts/lease-paths.ps1
+# Local only (gitignored): HANDOFF.md, PROGRESS.md, .agents/STATE.md
 ```
 
 ## License

@@ -27,7 +27,7 @@ grok
 ```
 
 ```text
-HANDOFF.md と AGENTS.md を読んで Phase チェックリストに従う
+AGENTS.md と .agents/STATE.md を読む（無ければ STATE.example.md から作成）
 ```
 
 スモーク（Codex read-only レビュー）:
@@ -36,12 +36,20 @@ HANDOFF.md と AGENTS.md を読んで Phase チェックリストに従う
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
 
+ローカル専用（gitignore。必要に応じて作成）:
+
+| ファイル | 用途 |
+|----------|------|
+| `HANDOFF.md` | セッション引き継ぎ |
+| `PROGRESS.md` | 日付付き進捗ログ |
+| `.agents/STATE.md` | フェーズ / 最終 job（雛形: `.agents/STATE.example.md`） |
+
 ## 隔離
 
 | 層 | 意味 |
 |----|------|
 | **L0**（既定） | 書き手は1人。Codex implement 中は Operator が同ツリーのコード編集を止める |
-| **L1**（後続） | ファイル所有権リース（CCO 流儀） |
+| **L1** | ファイル所有権リース（`scripts/lease-paths.ps1`） |
 | **L2**（後続） | job ごと git worktree（任意。CCO の本線ではない） |
 
 ## ライセンス
