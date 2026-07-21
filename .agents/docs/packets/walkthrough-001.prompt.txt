@@ -1,0 +1,30 @@
+## Objective
+Walkthrough demo: review fixtures/sample.txt for clarity for a new contributor to grok-orchestra. Keep the answer short and concrete.
+
+## Constraints
+- read-only; do not modify any files
+- Respond in Japanese
+- Keep the whole answer under 40 lines
+- Do not run network tools
+
+## Relevant files
+- fixtures/sample.txt
+- AGENTS.md (optional skim)
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- Answer includes at least one concrete improvement suggestion with a sample rewrite line
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks
+
+## Assumptions
+- Reader is an intermediate developer new to this repo
+
+## Unverified
+- None
