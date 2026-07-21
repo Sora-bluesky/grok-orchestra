@@ -71,6 +71,8 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | Source | Severity | Status | Notes |
 |--------|----------|--------|-------|
 | quoted porcelain paths for non-ASCII untracked filenames (`verify-job.ps1` Get-UntrackedPaths) | P2 | **DEFER** | Paths with C0/non-ASCII may be quoted by `git status --porcelain`; content scan/scope may miss them until unquote is implemented. Track for v0.2.x / plan 002 follow-up; not in authorized round-3 fix scope (2026-07-21). |
+| leading-whitespace filename segments collapse in normalization (`scripts/lib/path-normalize.ps1`) | P1 | **DEFER** (known limitation) | Git permits filenames like `" src/file.ps1"`; Trim-based normalization strips the space, skewing scope checks. Only exploitable by an adversarial worker crafting malformed filenames — verify-job is an accident safety net, not a security boundary against hostile workers. Documented as a known limitation; revisit with the porcelain-unquote work above (user decision, review round budget exhausted 2026-07-21). |
+| unbounded content scan of large untracked files (`verify-job.ps1` marker scan) | P2 | **DEFER** | Whole-file read of any unignored untracked file; a large artifact could slow verify-job. Add a size cap (e.g. skip >1 MB with WARN) in v0.2.x. |
 
 ## Dependency notes
 
