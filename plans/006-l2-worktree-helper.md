@@ -35,6 +35,8 @@ Phase 3 送りになっていた最後の隔離レイヤー。**設計原則: wo
    (base 既定 = 現在の HEAD SHA)。`.agents/worktrees/` は既に gitignored。
    作成した worktree の絶対パスと base SHA を stdout と
    `.agents/locks/<JobId>.worktree.json`(job_id / path / branch / base_sha / status)に記録。
+   `.gitignore` に `.agents/locks/*.worktree.json` を追加する(現行パターン
+   `*.lease.json` はこれを覆わず、毎ジョブ untracked 汚染になるため)。
 3. **ロック体系との関係**: worktree 内の write ジョブは**メインツリーの
    `write-job.lock` を取らない**(隔離はツリー分離で担保)。ただし
    `<JobId>.worktree.json` を「L2 リース」として扱い、`check.ps1` のステール検出対象に
@@ -44,7 +46,10 @@ Phase 3 送りになっていた最後の隔離レイヤー。**設計原則: wo
    指定時は new を呼び、`codex exec -C <worktree-path>` で実行し、
    L0 ロック取得をスキップする(worktree 内 implement/fix のみ。read-only ジョブでの
    `-Worktree` は no-op + 警告)。
-5. **collect**: worktree 内で `verify-job.ps1 -BaseRef <base_sha>` を実行し、
+5. **collect**: worktree 内で `verify-job.ps1 -JobId <JobId> -BaseRef <base_sha>` を実行し
+   (ログ規約: delegate `-Worktree` 経由のジョブは **worktree 側**の
+   `.agents/logs/codex/<JobId>.last.txt` に結果が書かれるので、collect の status:log 判定は
+   worktree ルート基準で行う。Grok 直接編集の worktree では `-SkipLog`)、
    PASS/FAIL と `git diff <base_sha>..wt/<JobId> --stat` を表示。
    **マージ・rebase・cherry-pick は一切行わない。** 出力の最後に Operator 向けの
    次アクション(`git merge --no-ff wt/<JobId>` または PR 作成)を案内するのみ。
@@ -68,6 +73,7 @@ Phase 3 送りになっていた最後の隔離レイヤー。**設計原則: wo
 
 **In scope**: `scripts/worktree-job.ps1`(create), `scripts/delegate-codex.ps1`(`-Worktree` 追加),
 `scripts/check.ps1`(L2 ステール検出追加), `.agents/rules/isolation.md`,
+`.gitignore`(`*.worktree.json` の 1 行追加のみ),
 `tests/worktree-job.Tests.ps1`(create), `plans/README.md` / 本ファイル(status)
 
 **Out of scope**: 自動マージ・自動 PR 作成(F10 で恒久禁止)、`wt/*` ブランチの自動削除、
