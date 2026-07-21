@@ -60,6 +60,24 @@ Describe 'verify-job.ps1 hardening (plan 005)' {
     $text | Should -Match 'size > 1MB'
     $text | Should -Match 'verify-job: PASS'
   }
+
+  It 'still fails F07 when a copy (C) record precedes a test-file deletion' {
+    # Regression: name-status -z copy records are three fields; treating C like single-path
+    # desyncs the parser and can drop a following D of a test file (Codex P2 on PR #17).
+    New-Item -ItemType Directory -Force -Path (Join-Path $script:Repo 'tests') | Out-Null
+    $payload = (1..80 | ForEach-Object { "line $_ unique-copy-payload-for-similarity" }) -join "`n"
+    Set-Content -LiteralPath (Join-Path $script:Repo 'src\seed-copy.ps1') -Value $payload -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $script:Repo 'tests\Doomed.Tests.ps1') -Value '# doomed test' -Encoding UTF8
+    git add -A
+    git commit -qm 'seed-for-copy'
+    git config diff.renames copies
+    Copy-Item -LiteralPath (Join-Path $script:Repo 'src\seed-copy.ps1') -Destination (Join-Path $script:Repo 'src\seed-copy-2.ps1')
+    Remove-Item -LiteralPath (Join-Path $script:Repo 'tests\Doomed.Tests.ps1') -Force
+    git add -A
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'f07:tests'
+  }
 }
 
 Describe 'path-normalize preserves segment whitespace' {

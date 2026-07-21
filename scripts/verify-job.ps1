@@ -314,18 +314,22 @@ function Get-DeletedPaths {
   }
   foreach ($gitArgs in $argSets) {
     $raw = Invoke-GitRaw $gitArgs
-    # -z name-status: separate NUL fields — "D\0path\0" or "R100\0old\0new\0"
+    # -z name-status: "D\0path\0", rename "R100\0old\0new\0", or copy "C100\0old\0new\0"
+    # R and C both carry two paths (git diff-format raw output); mis-counting desyncs later records.
     $parts = ConvertTo-StringArray (Split-GitNulRecords $raw)
     $i = 0
     while ($i -lt $parts.Count) {
       $status = [string]$parts[$i]
       if ([string]::IsNullOrEmpty($status)) { $i++; continue }
-      if ($status -match '^R' -and ($i + 2) -lt $parts.Count) {
-        $oldPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 1])
-        $newPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 2])
-        if ($oldPath -and $newPath) {
-          if ((Test-IsTestLikePath $oldPath) -and -not (Test-IsTestLikePath $newPath)) {
-            [void]$set.Add($oldPath)
+      # Rename or copy: always consume three fields. Only rename can be an F07 test escape.
+      if ($status -match '^[RC]' -and ($i + 2) -lt $parts.Count) {
+        if ($status -match '^R') {
+          $oldPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 1])
+          $newPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 2])
+          if ($oldPath -and $newPath) {
+            if ((Test-IsTestLikePath $oldPath) -and -not (Test-IsTestLikePath $newPath)) {
+              [void]$set.Add($oldPath)
+            }
           }
         }
         $i += 3
