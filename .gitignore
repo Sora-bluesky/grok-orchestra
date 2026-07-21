@@ -5,6 +5,11 @@
 *.pem
 auth.json
 
+# Local session / operator continuity (not for public tree)
+HANDOFF.md
+PROGRESS.md
+.agents/STATE.md
+
 # Orchestra runtime
 .agents/logs/codex/*.last.txt
 .agents/logs/codex/*.stderr.log

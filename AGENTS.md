@@ -52,7 +52,7 @@ On conflict: stop and ask the user (do not implement).
 ## Shared memory (F20)
 
 Grok and Codex **do not share sessions**.  
-The only shared surface is **files**: packets, results, STATE, DESIGN, PROGRESS.
+The only shared surface is **files**: packets, results, local STATE / HANDOFF / PROGRESS (gitignored), DESIGN.
 
 ## Isolation (F08) — L0 default
 
