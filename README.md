@@ -48,6 +48,14 @@ If .agents/STATE.md is missing, seed it from .agents/STATE.example.md.
 Summarize topology and the next safe action in under 10 lines.
 ```
 
+### Install into your own project
+
+```powershell
+.\scripts\install.ps1 -Target C:\path\to\your-app
+```
+
+Creates (among other files) `.agents/`, core `scripts/`, and a target-specific `smoke-001` packet. Existing `AGENTS.md` is never overwritten; a proposal lands as `AGENTS.grok-orchestra.md`. Use `-DryRun` to preview, `-Force` only when you intend to overwrite.
+
 ### Smoke test
 
 ```powershell

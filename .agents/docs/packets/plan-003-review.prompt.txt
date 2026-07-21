@@ -1,0 +1,34 @@
+## Objective
+Review Plan 003 install.ps1 implementation for safety (no overwrite by default), smoke packet exclusion, and test coverage. Do not modify files.
+
+## Constraints
+- read-only; do not modify any files
+- Do not run network tools
+- Do not invoke codex recursively
+- Respond in Japanese
+- Keep the whole answer under 90 lines
+- Focus only on Relevant files
+
+## Relevant files
+- scripts/install.ps1
+- tests/install.Tests.ps1
+- README.md
+- README.ja.md
+- .agents/skills/init/SKILL.md
+- plans/003-one-command-installer.md
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES
+- Explicitly judge: default never overwrites existing files
+- Explicitly judge: smoke-001 is generated not bulk-copied from source fixtures
+- Explicitly judge: Target=self is rejected
+- List concrete defects with file + symptom if any
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks

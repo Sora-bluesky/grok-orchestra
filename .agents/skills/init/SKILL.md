@@ -23,6 +23,8 @@ Use when bootstrapping **this** clone, or when placing the harness into **anothe
 
 ## Steps — another project (advanced)
 
+First run `scripts/install.ps1 -Target <path>`; use this section for verifying the generated layout and merge decisions.
+
 1. Copy or submodule into the target app as needed:
    - `.agents/` (rules, skills, docs structure)
    - `scripts/delegate-codex.ps1`, `scripts/lease-paths.ps1`

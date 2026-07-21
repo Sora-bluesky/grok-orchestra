@@ -145,11 +145,11 @@ Step 3 の 6 ケース。パターンは `tests/lease-paths.Tests.ps1`(Plan 001)
 
 ## Done criteria
 
-- [ ] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0`
-- [ ] 空ディレクトリへの実行で init/SKILL.md 記載のレイアウトが揃う
-- [ ] 既存ファイルは `-Force` 無しでは 1 バイトも変わらない(2 回実行で確認)
-- [ ] `git status` で in-scope 外の変更が無い
-- [ ] `plans/README.md` の status 更新
+- [x] `Invoke-Pester -Path tests -PassThru` → `FailedCount = 0` (install 7 + suite, 2026-07-21)
+- [x] 空ディレクトリへの実行で init/SKILL.md 記載のレイアウトが揃う
+- [x] 既存ファイルは `-Force` 無しでは 1 バイトも変わらない(2 回実行で確認)
+- [x] `git status` で in-scope 外の変更が無い
+- [x] `plans/README.md` の status 更新
 
 ## STOP conditions
 

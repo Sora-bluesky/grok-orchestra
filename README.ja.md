@@ -48,6 +48,14 @@ grok
 トポロジと次の安全な一手を10行以内で要約してください。
 ```
 
+### 自分のプロジェクトへ導入
+
+```powershell
+.\scripts\install.ps1 -Target C:\path\to\your-app
+```
+
+`.agents/`・主要 `scripts/`・導入先向け `smoke-001` packet などを生成します。既存の `AGENTS.md` は上書きせず、提案は `AGENTS.grok-orchestra.md` に置きます。確認は `-DryRun`、上書きは `-Force` のみ。
+
 ### スモーク
 
 ```powershell
