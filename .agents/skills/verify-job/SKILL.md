@@ -8,6 +8,8 @@ description: Operator verification gate after Grok or Codex writes. Required for
 Run after every product write (Grok implement **or** Codex `implement`/`fix`).  
 Optional dry-run after a Codex review.
 
+機械化可能な項目は `scripts/verify-job.ps1 -JobId <id>` を先に実行し、その出力をこの checklist の証跡とする。
+
 ## Checklist
 
 1. **Status**
