@@ -11,7 +11,7 @@
 
 **grok-orchestra** は [Grok Build](https://x.ai)(xAI)と [OpenAI Codex CLI](https://github.com/openai/codex) を協調させるマルチエージェント開発ハーネスです。**Grok がオペレーター兼デフォルト実装者、Codex が懐疑役** — 設計者・独立レビュアー・原因調査役を務めます。
 
-現行リリース: **[v0.1.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.1.0)** · [Changelog](CHANGELOG.md) · `main` は v0.2.0 開発版(テスト・CI・doctor/verify ツール・インストーラー)を含みます。
+現行リリース: **[v0.2.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.2.0)** · [Changelog](CHANGELOG.md)
 
 [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra)(@mkj / 松尾研究所)と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) にインスパイアされています。
 

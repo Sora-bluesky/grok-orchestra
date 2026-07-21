@@ -2,6 +2,53 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.2.0] - 2026-07-21
+
+### Highlights
+
+- establish the verification baseline: Pester test suite (40 tests) + GitHub Actions CI on `windows-latest` ([#9](https://github.com/Sora-bluesky/grok-orchestra/pull/9))
+- mechanize the conventions: `scripts/check.ps1` (environment doctor + stale-lock GC) and `scripts/verify-job.ps1` (mechanical done gate) ([#10](https://github.com/Sora-bluesky/grok-orchestra/pull/10))
+- add `scripts/install.ps1` — one-command, non-destructive install of the harness into another project tree ([#11](https://github.com/Sora-bluesky/grok-orchestra/pull/11))
+- publish a real-transcript end-to-end walkthrough (EN/JA) ([#13](https://github.com/Sora-bluesky/grok-orchestra/pull/13))
+- overhaul README (EN/JA) to full template-grade documentation ([#12](https://github.com/Sora-bluesky/grok-orchestra/pull/12))
+- the entire release was **dogfooded**: Grok executed advisor plans through this harness's own packet → delegate → review → verify loop ([#8](https://github.com/Sora-bluesky/grok-orchestra/pull/8))
+
+### Release scope
+
+- `tests/` Pester 5 suite covering lease overlap/traversal, Prompt Contract gate, check/verify behavior, and installer idempotency; `-LockDir` parameter for test isolation ([#9](https://github.com/Sora-bluesky/grok-orchestra/pull/9), [#10](https://github.com/Sora-bluesky/grok-orchestra/pull/10), [#11](https://github.com/Sora-bluesky/grok-orchestra/pull/11))
+- `.github/workflows/ci.yml`: Pester on push/PR
+- `scripts/check.ps1`: tool presence, SSOT layout, PID-based stale write-lock detection (`-Fix` cleans provable-stale locks/leases), gitignore hygiene
+- `scripts/verify-job.ps1`: result-log check, diff scope vs `owned_paths` (staged + unstaged + untracked), stub-marker scan, F07 test-weakening detection (deletion, rename-out, skip markers) with explicit `-AcceptTestChanges` override
+- `scripts/lib/path-normalize.ps1`: shared segment-based path normalization used by lease-paths and verify-job (fixes leading-dot collapse and `../` bypass)
+- `scripts/install.ps1`: `-Target` / `-DryRun` / `-Force`; never overwrites by default, reports every skip, generates a target-specific smoke packet, proposes `AGENTS.grok-orchestra.md` beside an existing contract
+- `docs/walkthrough.md` / `docs/walkthrough.ja.md`: captured (never fabricated) transcripts of the full check → packet → delegate → verify cycle
+- `plans/`: advisor audit handoff, dogfooding protocol, bounded PR-review-bot protocol, errata and deferred-findings ledger
+- record PID in `write-job.lock`; collapse a redundant branch in `delegate-codex.ps1` ([#10](https://github.com/Sora-bluesky/grok-orchestra/pull/10))
+
+### Safety and operations
+
+- bounded review-bot protocol: triage fix / defer / decline with evidence, max 2 fix rounds per PR, escalate on repeats (exercised live on [#10](https://github.com/Sora-bluesky/grok-orchestra/pull/10), [#11](https://github.com/Sora-bluesky/grok-orchestra/pull/11), [#13](https://github.com/Sora-bluesky/grok-orchestra/pull/13))
+- verify-job hardening from review: BaseRef option-injection rejection, fail-closed git invocation, full-SHA preservation, untracked-content scanning
+- known limitations recorded (not silently shipped): quoted porcelain paths for non-ASCII filenames, adversarial leading-whitespace filenames, unbounded untracked-file scan size, symlinked self-target in installer — see `plans/README.md` Follow-up/deferred
+
+### Distribution
+
+- source-only GitHub Release (no compiled binaries)
+- install by cloning, using the repository as a template, or `scripts/install.ps1 -Target <your-app>`
+- entrypoints: root `AGENTS.md`, `scripts/delegate-codex.ps1`, `scripts/check.ps1`, `scripts/verify-job.ps1`
+- bilingual README: [README.md](README.md) / [README.ja.md](README.ja.md); walkthrough with real transcripts: [docs/walkthrough.md](docs/walkthrough.md)
+
+### Validation
+
+- Pester 40/40 passing locally and in CI at release commit
+- `check.ps1` exit 0 (FAIL=0 WARN=0 OK=9) on a clean clone
+- `verify-job.ps1 -SkipLog` PASS on a clean tree; walkthrough transcripts recaptured from a clean tree
+- installer exercised end-to-end: fresh install, second-run idempotency (all skips reported), existing-`AGENTS.md` non-destruction, `-DryRun` zero writes
+
+### Full Changelog
+
+- [v0.1.0...v0.2.0](https://github.com/Sora-bluesky/grok-orchestra/compare/v0.1.0...v0.2.0)
+
 ## [v0.1.0] - 2026-07-21
 
 ### Highlights
