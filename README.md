@@ -4,6 +4,8 @@
 
 **Grok as operator · Codex CLI as the specialist worker.**
 
+Current release: **[v0.1.0](https://github.com/Sora-bluesky/grok-orchestra/releases/tag/v0.1.0)** · [Changelog](CHANGELOG.md)
+
 A multi-agent development harness: you talk only to **Grok**. **Codex** handles design, independent review, and root-cause investigation by default. **Grok implements** by default and always owns verification.
 
 Inspired by [Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) and [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra).
