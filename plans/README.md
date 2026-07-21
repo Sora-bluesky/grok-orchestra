@@ -66,6 +66,12 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | installer bulk-copies smoke packet then cannot overwrite | P2 | `plans/003` Step 1 exclude + generate only |
 | status file missing from every plan's In scope | P2 | `plans/001`–`004` In scope lists |
 
+## Follow-up / deferred (PR #10 Codex review)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| quoted porcelain paths for non-ASCII untracked filenames (`verify-job.ps1` Get-UntrackedPaths) | P2 | **DEFER** | Paths with C0/non-ASCII may be quoted by `git status --porcelain`; content scan/scope may miss them until unquote is implemented. Track for v0.2.x / plan 002 follow-up; not in authorized round-3 fix scope (2026-07-21). |
+
 ## Dependency notes
 
 - 002 は 001 に依存: スクリプト変更(delegate-codex.ps1 への PID 記録追加等)を

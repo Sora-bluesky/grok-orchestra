@@ -16,23 +16,11 @@ if ([string]::IsNullOrWhiteSpace($LockDir)) { $LockDir = Join-Path $repoRoot '.a
 $lockDir = $LockDir
 New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
 
+. (Join-Path $PSScriptRoot 'lib\path-normalize.ps1')
+
 function ConvertTo-OwnedPath {
   param([string] $Path)
-  if ([string]::IsNullOrWhiteSpace($Path)) { throw 'owned_paths must not contain empty paths.' }
-  if ([System.IO.Path]::IsPathRooted($Path)) { throw "owned_paths must be repo-relative: $Path" }
-  # Normalize separators only. Do not TrimStart('.') — that collapses "../x" to "x"
-  # and would strip a legitimate leading-dot segment such as ".agents".
-  $normalized = $Path.Trim().Replace('\', '/')
-  while ($normalized.StartsWith('./')) { $normalized = $normalized.Substring(2) }
-  $normalized = $normalized.TrimStart('/')
-  if (-not $normalized) {
-    throw "owned_paths must stay inside the repository: $Path"
-  }
-  $segments = @($normalized -split '/' | Where-Object { $_ -ne '' -and $_ -ne '.' })
-  if ($segments.Count -eq 0 -or ($segments | Where-Object { $_ -eq '..' })) {
-    throw "owned_paths must stay inside the repository: $Path"
-  }
-  return ($segments -join '/').ToLowerInvariant()
+  return ConvertTo-NormalizedRepoPath -Path $Path -Strict
 }
 
 function Test-PathOverlap {

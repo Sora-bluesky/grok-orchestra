@@ -108,4 +108,33 @@ Describe 'verify-job.ps1' {
     $LASTEXITCODE | Should -Be 1
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'f07:tests'
   }
+
+  It 'keeps leading-dot .agents under OwnedPaths .agents' {
+    New-Item -ItemType Directory -Force -Path (Join-Path $script:Repo '.agents') | Out-Null
+    Set-Content -LiteralPath (Join-Path $script:Repo '.agents\config.txt') -Value 'seed' -Encoding UTF8
+    git add -A
+    git commit -qm 'seed-agents'
+    Set-Content -LiteralPath (Join-Path $script:Repo '.agents\config.txt') -Value 'changed' -Encoding UTF8
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('.agents') *>&1
+    $LASTEXITCODE | Should -Be 0
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'verify-job: PASS'
+  }
+
+  It 'does not treat OwnedPaths agents as covering .agents paths' {
+    New-Item -ItemType Directory -Force -Path (Join-Path $script:Repo '.agents') | Out-Null
+    Set-Content -LiteralPath (Join-Path $script:Repo '.agents\secret.txt') -Value 'seed' -Encoding UTF8
+    git add -A
+    git commit -qm 'seed-dot-agents'
+    Set-Content -LiteralPath (Join-Path $script:Repo '.agents\secret.txt') -Value 'leaked' -Encoding UTF8
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('agents') *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'outside owned_paths'
+  }
+
+  It 'fails when test file is renamed out of tests/' {
+    git mv 'tests/Sample.Tests.ps1' 'src/Sample.ps1'
+    $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo *>&1
+    $LASTEXITCODE | Should -Be 1
+    ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'f07:tests'
+  }
 }

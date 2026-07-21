@@ -36,6 +36,8 @@ $ErrorActionPreference = 'Stop'
 $script:GitFailed = $false
 $script:GitFailMessages = [System.Collections.Generic.List[string]]::new()
 
+. (Join-Path $PSScriptRoot 'lib\path-normalize.ps1')
+
 function Get-RepoRoot {
   if ($RepoRoot) { return (Resolve-Path -LiteralPath $RepoRoot).Path }
   return (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -216,6 +218,11 @@ function Get-AddedDiffLines {
   return [string[]]$added.ToArray()
 }
 
+function Test-IsTestLikePath {
+  param([string] $Path)
+  return $Path -match '(?i)(test|spec|Tests)'
+}
+
 function Get-DeletedPaths {
   param([string] $BaseSha)
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -227,8 +234,26 @@ function Get-DeletedPaths {
   }
   foreach ($args in $argSets) {
     foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked $args))) {
-      if ($line -match '^[D]\s+(.+)$') {
+      # Prefer tab-separated name-status (git default); fall back to whitespace.
+      if ($line -match '^[D]\t(.+)$' -or $line -match '^[D]\s+(.+)$') {
         [void]$set.Add($Matches[1].Trim().Replace('\', '/'))
+        continue
+      }
+      # Rename: R100\told\tnew — treat test→non-test rename as test removal (F07).
+      $oldPath = $null
+      $newPath = $null
+      if ($line -match '^R\d*\t(.+)\t(.+)$') {
+        $oldPath = $Matches[1].Trim().Replace('\', '/')
+        $newPath = $Matches[2].Trim().Replace('\', '/')
+      }
+      elseif ($line -match '^R\d*\s+(\S+)\s+(\S+)$') {
+        $oldPath = $Matches[1].Trim().Replace('\', '/')
+        $newPath = $Matches[2].Trim().Replace('\', '/')
+      }
+      if ($oldPath -and $newPath) {
+        if ((Test-IsTestLikePath $oldPath) -and -not (Test-IsTestLikePath $newPath)) {
+          [void]$set.Add($oldPath)
+        }
       }
     }
   }
@@ -240,11 +265,15 @@ function Test-UnderOwnedPaths {
     [string] $Path,
     [string[]] $Owned
   )
-  $p = $Path.Replace('\', '/').TrimStart('./').ToLowerInvariant()
+  # Segment normalize (shared with lease-paths). Never TrimStart('.') — that strips ".agents".
+  $p = ConvertTo-NormalizedRepoPath -Path $Path
+  if (-not $p) { return $false }
   foreach ($o in $Owned) {
-    $own = $o.Replace('\', '/').Trim().TrimStart('./').TrimEnd('/').ToLowerInvariant()
+    $own = ConvertTo-NormalizedRepoPath -Path $o
     if (-not $own) { continue }
-    if ($p -eq $own -or $p.StartsWith($own + '/')) { return $true }
+    if ($p -eq $own -or $p.StartsWith($own + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
   }
   return $false
 }
@@ -345,7 +374,7 @@ if (-not $fail) {
   }
 
   # 4. Test weakening (F07) — staged + unstaged
-  $testDeleteHits = @($deleted | Where-Object { $_ -match '(?i)(test|spec|Tests)' })
+  $testDeleteHits = @($deleted | Where-Object { Test-IsTestLikePath $_ })
   $skipHits = @()
   foreach ($line in $addedLines) {
     if ($line -match 'Skip\s*=\s*\$true' -or $line -match 'it\.skip' -or $line -match 'describe\.skip' -or $line -match '@pytest\.mark\.skip') {
