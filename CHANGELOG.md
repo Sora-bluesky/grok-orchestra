@@ -31,6 +31,13 @@ All notable changes to this project are documented in this file.
 - verify-job hardening from review: BaseRef option-injection rejection, fail-closed git invocation, full-SHA preservation, untracked-content scanning
 - known limitations recorded (not silently shipped): quoted porcelain paths for non-ASCII filenames, adversarial leading-whitespace filenames, unbounded untracked-file scan size, symlinked self-target in installer — see `plans/README.md` Follow-up/deferred
 
+### Distribution
+
+- source-only GitHub Release (no compiled binaries)
+- install by cloning, using the repository as a template, or `scripts/install.ps1 -Target <your-app>`
+- entrypoints: root `AGENTS.md`, `scripts/delegate-codex.ps1`, `scripts/check.ps1`, `scripts/verify-job.ps1`
+- bilingual README: [README.md](README.md) / [README.ja.md](README.ja.md); walkthrough with real transcripts: [docs/walkthrough.md](docs/walkthrough.md)
+
 ### Validation
 
 - Pester 40/40 passing locally and in CI at release commit
