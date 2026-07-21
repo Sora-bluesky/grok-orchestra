@@ -64,6 +64,8 @@ grok
 
 `.agents/logs/codex/smoke-001.last.txt` が非空になれば OK（gitignore 対象）。
 
+実トランスクリプト付きの一連の流れ: [docs/walkthrough.ja.md](docs/walkthrough.ja.md) · [English](docs/walkthrough.md)。
+
 ## 役割
 
 | 作業 | 担当 | モード |

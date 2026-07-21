@@ -64,6 +64,8 @@ Creates (among other files) `.agents/`, core `scripts/`, and a target-specific `
 
 Expect a non-empty `.agents/logs/codex/smoke-001.last.txt` (gitignored).
 
+See the full cycle with real transcripts: [docs/walkthrough.md](docs/walkthrough.md) · [日本語](docs/walkthrough.ja.md).
+
 ## Roles
 
 | Work | Who | Mode |
