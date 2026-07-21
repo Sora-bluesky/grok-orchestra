@@ -2,71 +2,117 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**Grok = オペレーター · Codex CLI = 唯一のワーカー**
+**Grok = オペレーター · Codex CLI = 専門ワーカー**
 
-[Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を吸収したマルチエージェント開発ハーネスです（Claude Code はワーカーにしません）。
+マルチエージェント開発ハーネスです。ユーザーが話す相手は **Grok だけ**。**Codex** は設計・レビュー・深いデバッグを既定で担当します。実装の既定は Grok、完了判定（verify）も Grok です。
+
+[Claude Code Orchestra](https://github.com/DeL-TaiseiOzaki/claude-code-orchestra) と [Antigravity Orchestra](https://github.com/Sora-bluesky/antigravity-orchestra) の概念を参照しています（Claude Code をワーカーにはしません）。
 
 ## なぜ
 
-- ユーザーが触るのは **Grok だけ**
-- 深い設計・レビュー・複雑実装は **Codex**（`codex exec`）
-- 共有状態は **ファイルのみ**（セッション共有なし）
-- 失敗モード（コンテキスト汚染・二重書き込み・偽 done・コスト爆発など）を設計で潰す → `.agents/docs/failure-modes.md`
+- **単一 UI** — 触るのは Grok のみ
+- **役割分割** — Grok が実装、Codex が設計/レビュー/デバッグ（Codex 実装は例外）
+- **ファイル SSOT** — セッション共有なし。packet と docs が共有面
+- **失敗モードを設計で潰す** — コンテキスト汚染・二重書き込み・偽 done・コスト爆発など → [`.agents/docs/failure-modes.md`](.agents/docs/failure-modes.md)
 
 ## 前提
 
-- Grok Build CLI 認証済み
-- Codex CLI 認証済み
-- Windows PowerShell 7+ 推奨
+| ツール | メモ |
+|--------|------|
+| [Grok Build](https://x.ai) CLI | `grok login`（または `XAI_API_KEY`） |
+| [Codex CLI](https://github.com/openai/codex) | `codex login` |
+| Windows PowerShell 7+ | スクリプト実行に推奨 |
+
+```powershell
+codex --version
+grok models   # または grok --version
+```
 
 ## クイックスタート
 
-このリポジトリは **ハーネス用テンプレート** です。読むのは **このツリー内の契約** です。別プロジェクトの `HANDOFF.md` や、別リポの `AGENTS.md` を前提にしないでください。
+このリポジトリを clone（または template 利用）し、**このツリー内**で作業してください。読む契約は **このリポの** `AGENTS.md` です。
 
 ```powershell
-cd path\to\grok-orchestra
-# 任意: このワークスペース用のローカル状態
-Copy-Item .agents\STATE.example.md .agents\STATE.md
+git clone https://github.com/Sora-bluesky/grok-orchestra.git
+cd grok-orchestra
+Copy-Item .agents\STATE.example.md .agents\STATE.md   # 任意
 grok
 ```
 
-Grok への最初のメッセージ例:
+最初のメッセージ例:
 
 ```text
 あなたはこの grok-orchestra ワークスペースのオペレーターです。
 ./AGENTS.md と ./.agents/skills/ の契約に従ってください。
-HANDOFF.md は探さないでください（ローカル任意。公開テンプレの一部ではありません）。
 .agents/STATE.md が無ければ .agents/STATE.example.md から作ってください。
 トポロジと次の安全な一手を10行以内で要約してください。
 ```
 
-スモーク（このリポ上での Codex read-only レビュー）:
+### スモーク（Codex read-only）
 
 ```powershell
 .\scripts\delegate-codex.ps1 -JobId smoke-001 -Type review -PromptFile .agents\docs\packets\smoke-001.prompt.txt
 ```
 
-### 別プロジェクトに組み込む場合
+`.agents/logs/codex/smoke-001.last.txt` が非空になれば OK（gitignore 対象）。
 
-1. `.agents/`・`scripts/`・ルート契約の型を対象アプリへコピーまたは submodule する  
-2. 既にある `AGENTS.md` とは **慎重にマージ**する（優先順位: ユーザー指示 → active packet → このハーネス契約）  
-3. セッション継続用ファイルを使うなら **ローカル専用** にする:
+## 役割
 
-| ファイル | 公開? | 用途 |
-|----------|-------|------|
-| このリポの `AGENTS.md` | 追跡 | *この* ハーネスのオペレーター契約 |
-| `.agents/STATE.example.md` | 追跡 | ローカル状態の雛形 |
-| `.agents/STATE.md` | gitignore | フェーズ / 最終 job（任意） |
-| `PROGRESS.md` | gitignore | 日付付きログ（任意） |
-| `HANDOFF.md` | gitignore | 引き継ぎ（任意・メンテ用） |
+| 役割 | 担当 |
+|------|------|
+| オーケストレーター、既定の **実装**、軽い調査、**verify** | Grok |
+| 設計、デバッグ、**監査・レビュー** | Codex（`read-only`） |
+| 実装（例外） | 親コンテキストが膨らむ・長時間バッチ・明示指定のときだけ Codex `workspace-write` |
+
+**目安:** Codex は疑う側、Grok は手を動かす側。非自明な Grok 実装のあとは Codex レビューしてから done。
 
 ## 隔離
 
 | 層 | 意味 |
 |----|------|
-| **L0**（既定） | 書き手は1人。Codex implement 中は Operator が同ツリーのコード編集を止める |
-| **L1** | ファイル所有権リース（`scripts/lease-paths.ps1`） |
-| **L2**（後続） | job ごと git worktree（任意。CCO の本線ではない） |
+| **L0**（既定） | プロダクトコードの書き手は同時に1人（Grok **または** Codex） |
+| **L1** | `scripts/lease-paths.ps1` によるパス所有権 |
+| **L2**（任意・後続） | job ごとの git worktree |
+
+## 別プロジェクトに組み込む
+
+1. `.agents/`・`scripts/`・ルート `AGENTS.md`・必要なら `.codex/` / `.grok/` をコピーまたは submodule  
+2. 既存のエージェント契約と **慎重にマージ**（優先: ユーザー指示 → active packet → このハーネス契約）  
+3. ライブな作業状態を使うならローカル専用に:
+
+| パス | 追跡? | 用途 |
+|------|-------|------|
+| `AGENTS.md` | する | このハーネスのオペレーター契約 |
+| `.agents/STATE.example.md` | する | ローカル状態の雛形 |
+| `.agents/STATE.md` | しない | フェーズ / 最終 job |
+| `PROGRESS.md` | しない | 任意の日付付きログ |
+
+## レイアウト
+
+```text
+AGENTS.md                 # オペレーター契約（まずここ）
+.agents/                  # rules / skills / docs / packets / logs
+.agents/STATE.example.md  # 任意の STATE 雛形
+.codex/AGENTS.md          # このツリーで Codex に見せる契約
+.grok/rules/              # Grok 向け薄いルール
+scripts/delegate-codex.ps1
+scripts/lease-paths.ps1
+docs/architecture.md
+```
+
+## スキル（入口）
+
+| スキル | 用途 |
+|--------|------|
+| `context-loader` | 最小コンテキスト読み込み |
+| `codex-system` | Codex 委譲（設計/レビュー/デバッグ。実装は例外） |
+| `verify-job` | プロダクト書き込み後の完了ゲート |
+| `plan` | Codex 計画 → 承認後に実装 |
+| `tdd` | red → green → refactor（Grok 実装、Codex レビュー） |
+| `simplify` | Codex 監査 → 任意で Grok 修正 |
+| `init` / `startproject` / `checkpointing` / `design-tracker` | 立ち上げと継続 |
+
+詳細: [`.agents/INDEX.md`](.agents/INDEX.md)
 
 ## ライセンス
 

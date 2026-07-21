@@ -17,8 +17,8 @@ description: Maintain design invariants and open questions with links to review 
 3. Save review evidence under `.agents/docs/reviews/` and link it from `DESIGN.md`.
 4. Update invariants, decisions, consequences, and open questions minimally.
 5. Never claim a design change without file, command, or review evidence.
-6. Route approved multi-file implementation through **codex-system** with owned paths.
-7. Operator runs **verify-job** after every `implement` or `fix` job.
+6. After approval, **Grok implements** by default; Codex `implement` only as exception.
+7. Operator runs **verify-job** after product writes; Codex re-review when non-trivial.
 
 ## Output
 

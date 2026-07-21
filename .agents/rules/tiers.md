@@ -4,14 +4,15 @@
 
 - User interaction, routing, integration, final response
 - Light research with tools; return short summaries only
-- Tiny edits only (≤1 file, obvious)
-- **Owns verify-job** after worker tasks
+- **Default implementer** for scoped, interactive work
+- **Owns verify-job** after any write (self or Codex)
+- Keeps parent context thin; escalates mass investigation/implement when needed
 
 ## Tier 2 — `sol` (Codex CLI)
 
-- Design, planning, complex implementation, deep debug, audit
+- **Default:** design, planning, deep debug, audit/review (`read-only`)
+- **Exception:** complex or context-heavy implementation (`workspace-write`)
 - Invoked only through Prompt Contract + `delegate-codex.ps1`
-- Sandbox: `read-only` for design/review/debug; `workspace-write` for implement/fix
 - Never default to danger-full-access
 
 ## Tier 3 — `fable` (later)

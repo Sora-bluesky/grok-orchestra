@@ -1,6 +1,6 @@
 ---
 name: simplify
-description: Find bounded deletion or simplification opportunities before making an optional verified fix.
+description: Codex audits for bounded deletion or simplification; Grok applies an optional verified fix.
 ---
 
 # simplify
@@ -17,8 +17,8 @@ description: Find bounded deletion or simplification opportunities before making
 3. Call **codex-system** with read-only type `review` or `investigate`.
 4. Rank deletion and simplification opportunities by evidence, impact, and risk.
 5. Do not perform drive-by refactors or unrelated formatting.
-6. If the user approves a change, create a separate `fix` packet with owned paths.
-7. Operator runs **verify-job** after the fix and checks behavior remains unchanged.
+6. If the user approves a change, **Grok applies** the bounded fix (Codex `fix` only as exception).
+7. Operator runs **verify-job** and checks behavior remains unchanged; Codex re-review if non-trivial.
 
 ## Output
 
