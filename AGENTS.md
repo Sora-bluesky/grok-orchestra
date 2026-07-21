@@ -19,7 +19,8 @@ The main agent must **not** by default:
 - Claim “done” without the verify gate
 - Treat self-review as the only quality gate after non-trivial changes
 
-Prefer **Grok for implementation** and **Codex for design / review / debug**.  
+Prefer **Grok for implementation** and **Codex for design / review / root-cause investigation**.  
+Investigation is usually **read-only** (diagnosis + fix plan); applying the fix is a separate write (usually Grok).  
 Escalate implementation away from the parent only when it would pollute context (see Routing).
 
 ## Priority order (context clash → F03)
@@ -37,18 +38,19 @@ On conflict: stop and ask the user (do not implement).
 | Tier | ID | Runtime | Role |
 |------|-----|---------|------|
 | 1 | default | Grok | Orchestrator, default **Builder**, light research, integration, **verify** |
-| 2 | sol | Codex CLI | Designer, Debugger, **Auditor** (default); Implementer only as exception |
+| 2 | sol | Codex CLI | Designer, Investigator, **Auditor** (default); Implementer only as exception |
 | 3 | fable | TBD | Rare advisor — not MVP |
 
-**One-line rule:** Sol is the skeptic (design/review). Grok moves the hands (implement + final verify).
+**One-line rule:** Sol is the skeptic (design / review / investigate). Grok moves the hands (implement + final verify).
 
 ## Routing
 
 | Situation | Route |
 |-----------|--------|
 | Design / trade-offs / plan | Codex `read-only` |
-| Unknown root cause | Codex `read-only` (debug) |
+| Unknown root cause | Codex `read-only` **investigate** → diagnosis + fix plan (not the patch itself) |
 | Code review / QA / audit | Codex `read-only` |
+| Apply fix after diagnosis | **Grok** (default write) |
 | Implement (default): clear scope, iterative | **Grok** |
 | After non-trivial Grok implement | Codex `read-only` review → then **verify-job** |
 | Tiny 1-file obvious fix | Grok direct → verify-job (Codex review optional) |
@@ -105,9 +107,9 @@ Required catalog: `.agents/docs/failure-modes.md` (F01–F20).
 ## Skill entry points
 
 - `context-loader` — load STATE + DESIGN + active task only  
-- `codex-system` — delegate design/review/debug (and exceptional implement) via `scripts/delegate-codex.ps1`  
+- `codex-system` — delegate design/review/investigate (and exceptional implement) via `scripts/delegate-codex.ps1`  
 - `verify-job` — post-implement gate (after Grok or Codex writes)  
-- `init` — place or verify the file SSOT safely  
+- `init` — place or verify the file SSOT (this tree or another app)  
 - `startproject` — run the six-phase project kickoff  
 - `plan` — produce a read-only, approval-gated plan (Codex)  
 - `tdd` — red-green-refactor; Grok writes by default; Codex reviews  
