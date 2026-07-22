@@ -110,6 +110,64 @@ function Invoke-GitChecked {
   return , $lines
 }
 
+# Raw stdout for -z (NUL-separated) paths. Capture via temp file so NULs survive.
+function Invoke-GitRaw {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]] $GitArgs
+  )
+  foreach ($a in $GitArgs) {
+    if ($a -match '^--output(=|$)') {
+      throw "Refusing git argument that can write files: $a"
+    }
+  }
+  $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ('gitz-' + [guid]::NewGuid().ToString('N') + '.bin')
+  $errFile = $outFile + '.err'
+  try {
+    # -FilePath (not -FileName): PS 5.1 Start-Process parameter name
+    $p = Start-Process -FilePath 'git' -ArgumentList $GitArgs `
+      -WorkingDirectory (Get-Location).Path `
+      -RedirectStandardOutput $outFile `
+      -RedirectStandardError $errFile `
+      -Wait -PassThru -NoNewWindow
+    $stderr = ''
+    if (Test-Path -LiteralPath $errFile) {
+      $stderr = [System.IO.File]::ReadAllText($errFile)
+    }
+    if ($p.ExitCode -ne 0) {
+      $script:GitFailed = $true
+      $msg = "git $($GitArgs -join ' ') exit=$($p.ExitCode) :: $($stderr.Trim())"
+      $script:GitFailMessages.Add($msg) | Out-Null
+      return ''
+    }
+    if (-not (Test-Path -LiteralPath $outFile)) { return '' }
+    return [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($outFile))
+  }
+  finally {
+    Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Split-GitNulRecords {
+  # Always return a flat string[] via ConvertTo-StringArray (never unary-comma nested).
+  # PS 5.1 compatible: split on [char]0 — NOT `u{0} (PS 6+ only).
+  param([string] $Raw)
+  if ([string]::IsNullOrEmpty($Raw)) {
+    return , ([string[]]@())
+  }
+  $list = New-Object System.Collections.Generic.List[string]
+  foreach ($p in $Raw.Split([char]0)) {
+    if ($null -ne $p -and $p.Length -gt 0) { $list.Add($p) | Out-Null }
+  }
+  return ConvertTo-StringArray ([string[]]$list.ToArray())
+}
+
+function ConvertTo-RepoSlashPath {
+  param([string] $Path)
+  if ([string]::IsNullOrEmpty($Path)) { return '' }
+  return $Path.Replace('\', '/')
+}
+
 function Resolve-BaseRefSha {
   param([string] $Ref)
   if ([string]::IsNullOrWhiteSpace($Ref)) { return '' }
@@ -136,17 +194,33 @@ function Resolve-BaseRefSha {
   return $sha
 }
 
+# Max untracked content scan size (plan 005).
+$script:MaxUntrackedScanBytes = 1MB
+$script:ScanSkipped = [System.Collections.Generic.List[string]]::new()
+
 function Get-UntrackedPaths {
+  # porcelain -z: records are "XY path\0" (no C-style quoting); renames have a second path\0.
+  $raw = Invoke-GitRaw @('status', '--porcelain', '-z', '-uall')
+  $parts = ConvertTo-StringArray (Split-GitNulRecords $raw)
   $paths = New-Object System.Collections.Generic.List[string]
-  foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('status', '--porcelain', '-uall')))) {
-    if ($line.Length -lt 4) { continue }
-    $xy = $line.Substring(0, 2)
-    if ($xy -eq '??') {
-      $path = $line.Substring(3).Trim().Trim('"').Replace('\', '/')
-      if ($path) { $paths.Add($path) | Out-Null }
+  $i = 0
+  while ($i -lt $parts.Count) {
+    $rec = [string]$parts[$i]
+    if ($rec.Length -lt 3) { $i++; continue }
+    $xy = $rec.Substring(0, 2)
+    $path = if ($rec.Length -gt 3 -and $rec[2] -eq ' ') { $rec.Substring(3) } else { $rec.Substring(2) }
+    $path = ConvertTo-RepoSlashPath $path
+    # Rename/copy: next NUL field is the other path — skip it for untracked listing.
+    if ($xy -match '^[RC]') {
+      $i += 2
+      continue
     }
+    if ($xy -eq '??' -and $path) {
+      $paths.Add($path) | Out-Null
+    }
+    $i++
   }
-  return [string[]]$paths.ToArray()
+  return ConvertTo-StringArray ([string[]]$paths.ToArray())
 }
 
 function Add-UntrackedPaths {
@@ -156,29 +230,28 @@ function Add-UntrackedPaths {
   }
 }
 
+function Get-NameOnlyPathsZ {
+  param([string[]] $GitArgs)
+  $raw = Invoke-GitRaw $GitArgs
+  $paths = New-Object System.Collections.Generic.List[string]
+  foreach ($p in (ConvertTo-StringArray (Split-GitNulRecords $raw))) {
+    $slash = ConvertTo-RepoSlashPath ([string]$p)
+    if ($slash) { $paths.Add($slash) | Out-Null }
+  }
+  return ConvertTo-StringArray ([string[]]$paths.ToArray())
+}
+
 function Get-ChangedPaths {
   param([string] $BaseSha)
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
   if ([string]::IsNullOrWhiteSpace($BaseSha)) {
-    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--name-only')))) {
-      $t = $line.Trim()
-      if ($t) { [void]$set.Add($t.Replace('\', '/')) }
-    }
-    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '--name-only')))) {
-      $t = $line.Trim()
-      if ($t) { [void]$set.Add($t.Replace('\', '/')) }
-    }
+    foreach ($p in (Get-NameOnlyPathsZ @('diff', '--name-only', '-z'))) { [void]$set.Add($p) }
+    foreach ($p in (Get-NameOnlyPathsZ @('diff', '--cached', '--name-only', '-z'))) { [void]$set.Add($p) }
   }
   else {
-    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--name-only', $BaseSha)))) {
-      $t = $line.Trim()
-      if ($t) { [void]$set.Add($t.Replace('\', '/')) }
-    }
-    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '--name-only', $BaseSha)))) {
-      $t = $line.Trim()
-      if ($t) { [void]$set.Add($t.Replace('\', '/')) }
-    }
+    foreach ($p in (Get-NameOnlyPathsZ @('diff', '--name-only', '-z', $BaseSha))) { [void]$set.Add($p) }
+    foreach ($p in (Get-NameOnlyPathsZ @('diff', '--cached', '--name-only', '-z', $BaseSha))) { [void]$set.Add($p) }
   }
   # Always include untracked (owned_paths can escape via new files under any BaseRef mode).
   Add-UntrackedPaths -Set $set
@@ -188,6 +261,7 @@ function Get-ChangedPaths {
 function Get-AddedDiffLines {
   param([string] $BaseSha)
   $chunks = New-Object System.Collections.Generic.List[string]
+  # Patch text still uses line-oriented diffs (not -z); fine for content markers.
   if ([string]::IsNullOrWhiteSpace($BaseSha)) {
     foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '-U0')))) { $chunks.Add($l) | Out-Null }
     foreach ($l in (ConvertTo-StringArray (Invoke-GitChecked @('diff', '--cached', '-U0')))) { $chunks.Add($l) | Out-Null }
@@ -202,11 +276,16 @@ function Get-AddedDiffLines {
       $added.Add($line.Substring(1)) | Out-Null
     }
   }
-  # Untracked files are invisible to git diff; read their full contents for F07/stub scans.
+  # Untracked files: read contents for F07/stub, with 1MB size cap (plan 005).
   foreach ($path in (ConvertTo-StringArray (Get-UntrackedPaths))) {
     if (-not $path) { continue }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
     try {
+      $len = (Get-Item -LiteralPath $path).Length
+      if ($len -gt $script:MaxUntrackedScanBytes) {
+        $script:ScanSkipped.Add($path) | Out-Null
+        continue
+      }
       foreach ($fl in (ConvertTo-StringArray (Get-Content -LiteralPath $path -Encoding UTF8 -ErrorAction Stop))) {
         $added.Add($fl) | Out-Null
       }
@@ -226,35 +305,44 @@ function Test-IsTestLikePath {
 function Get-DeletedPaths {
   param([string] $BaseSha)
   $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  # name-status -z: "STATUS\0path\0" or rename "R100\0old\0new\0"
   $argSets = if ([string]::IsNullOrWhiteSpace($BaseSha)) {
-    @(@('diff', '--name-status'), @('diff', '--cached', '--name-status'))
+    @(@('diff', '--name-status', '-z'), @('diff', '--cached', '--name-status', '-z'))
   }
   else {
-    @(@('diff', '--name-status', $BaseSha), @('diff', '--cached', '--name-status', $BaseSha))
+    @(@('diff', '--name-status', '-z', $BaseSha), @('diff', '--cached', '--name-status', '-z', $BaseSha))
   }
-  foreach ($args in $argSets) {
-    foreach ($line in (ConvertTo-StringArray (Invoke-GitChecked $args))) {
-      # Prefer tab-separated name-status (git default); fall back to whitespace.
-      if ($line -match '^[D]\t(.+)$' -or $line -match '^[D]\s+(.+)$') {
-        [void]$set.Add($Matches[1].Trim().Replace('\', '/'))
+  foreach ($gitArgs in $argSets) {
+    $raw = Invoke-GitRaw $gitArgs
+    # -z name-status: "D\0path\0", rename "R100\0old\0new\0", or copy "C100\0old\0new\0"
+    # R and C both carry two paths (git diff-format raw output); mis-counting desyncs later records.
+    $parts = ConvertTo-StringArray (Split-GitNulRecords $raw)
+    $i = 0
+    while ($i -lt $parts.Count) {
+      $status = [string]$parts[$i]
+      if ([string]::IsNullOrEmpty($status)) { $i++; continue }
+      # Rename or copy: always consume three fields. Only rename can be an F07 test escape.
+      if ($status -match '^[RC]' -and ($i + 2) -lt $parts.Count) {
+        if ($status -match '^R') {
+          $oldPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 1])
+          $newPath = ConvertTo-RepoSlashPath ([string]$parts[$i + 2])
+          if ($oldPath -and $newPath) {
+            if ((Test-IsTestLikePath $oldPath) -and -not (Test-IsTestLikePath $newPath)) {
+              [void]$set.Add($oldPath)
+            }
+          }
+        }
+        $i += 3
         continue
       }
-      # Rename: R100\told\tnew — treat test→non-test rename as test removal (F07).
-      $oldPath = $null
-      $newPath = $null
-      if ($line -match '^R\d*\t(.+)\t(.+)$') {
-        $oldPath = $Matches[1].Trim().Replace('\', '/')
-        $newPath = $Matches[2].Trim().Replace('\', '/')
+      if (($status.StartsWith('D') -or $status -eq 'D') -and ($i + 1) -lt $parts.Count) {
+        $del = ConvertTo-RepoSlashPath ([string]$parts[$i + 1])
+        if ($del) { [void]$set.Add($del) }
+        $i += 2
+        continue
       }
-      elseif ($line -match '^R\d*\s+(\S+)\s+(\S+)$') {
-        $oldPath = $Matches[1].Trim().Replace('\', '/')
-        $newPath = $Matches[2].Trim().Replace('\', '/')
-      }
-      if ($oldPath -and $newPath) {
-        if ((Test-IsTestLikePath $oldPath) -and -not (Test-IsTestLikePath $newPath)) {
-          [void]$set.Add($oldPath)
-        }
-      }
+      # Other single-path statuses (A/M/...)
+      $i += 2
     }
   }
   return @($set)
@@ -371,6 +459,10 @@ if (-not $fail) {
   }
   else {
     $items.Add((Write-Item PASS 'stub' 'no stub markers in added lines')) | Out-Null
+  }
+
+  foreach ($skippedPath in @($script:ScanSkipped)) {
+    $items.Add((Write-Item WARN 'scan' ("skipped {0} (size > 1MB)" -f $skippedPath))) | Out-Null
   }
 
   # 4. Test weakening (F07) — staged + unstaged

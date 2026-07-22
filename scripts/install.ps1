@@ -33,10 +33,57 @@ function Get-SourceRoot {
   return (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 }
 
+function Resolve-ComparablePath {
+  param([string] $Path)
+  try {
+    $full = [System.IO.Path]::GetFullPath($Path)
+  }
+  catch {
+    return $Path.TrimEnd('\', '/').ToLowerInvariant()
+  }
+  # Follow junction/symlink chain to a final non-link path (PS5.1: .Target; PS7+: ResolvedTarget).
+  # One-hop only was insufficient when -Target is a junction of a junction into the source root.
+  $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  $maxHops = 16
+  for ($hop = 0; $hop -lt $maxHops; $hop++) {
+    $key = $full.TrimEnd('\', '/').ToLowerInvariant()
+    if (-not $seen.Add($key)) { break } # cycle
+    try {
+      if (-not (Test-Path -LiteralPath $full)) { break }
+      $item = Get-Item -LiteralPath $full -Force
+      $linkTarget = $null
+      if ($item.PSObject.Properties['ResolvedTarget'] -and $item.ResolvedTarget) {
+        # ResolvedTarget is already fully resolved on PS7+; use once then stop.
+        $full = [System.IO.Path]::GetFullPath([string]$item.ResolvedTarget)
+        break
+      }
+      elseif ($item.LinkType -and $item.Target) {
+        $t = $item.Target
+        if ($t -is [System.Array]) { $t = $t[0] }
+        $linkTarget = [string]$t
+      }
+      else {
+        break # not a link
+      }
+      if (-not $linkTarget) { break }
+      if (-not [System.IO.Path]::IsPathRooted($linkTarget)) {
+        $parent = if ($item.PSIsContainer) { $item.Parent.FullName } else { $item.DirectoryName }
+        if (-not $parent) { $parent = Split-Path -Parent $full }
+        $linkTarget = Join-Path $parent $linkTarget
+      }
+      $full = [System.IO.Path]::GetFullPath($linkTarget)
+    }
+    catch {
+      break # Fall back to last lexical full path.
+    }
+  }
+  return $full.TrimEnd('\', '/').ToLowerInvariant()
+}
+
 function Test-SamePath {
   param([string] $Left, [string] $Right)
-  $l = [System.IO.Path]::GetFullPath($Left).TrimEnd('\', '/').ToLowerInvariant()
-  $r = [System.IO.Path]::GetFullPath($Right).TrimEnd('\', '/').ToLowerInvariant()
+  $l = Resolve-ComparablePath $Left
+  $r = Resolve-ComparablePath $Right
   return $l -eq $r
 }
 

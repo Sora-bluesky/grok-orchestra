@@ -4,16 +4,60 @@ on:
     branches: [main]
   pull_request:
 jobs:
-  test:
+  test-pwsh:
+    name: test (pwsh)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Pester
+      - name: Install Pester 5
         shell: pwsh
-        run: Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck -Scope CurrentUser
+          $pester = Get-Module -ListAvailable Pester |
+            Where-Object { $_.Version -ge [version]'5.0.0' } |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+          if (-not $pester) {
+            Write-Error 'Pester 5+ not available after Install-Module'
+            exit 1
+          }
+          Write-Host "Pester $($pester.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
       - name: Run tests
         shell: pwsh
         run: |
+          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
+          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
+          $r = Invoke-Pester -Path tests -PassThru -Output Detailed
+          if ($null -eq $r) { Write-Error 'Invoke-Pester returned null'; exit 1 }
+          if ($r.Result -ne 'Passed' -or $r.FailedCount -gt 0 -or $r.TotalCount -lt 9) {
+            Write-Error "Pester failed: Result=$($r.Result) Total=$($r.TotalCount) Failed=$($r.FailedCount)"
+            exit 1
+          }
+
+  # Windows PowerShell 5.1 — scripts declare #requires -Version 5.1
+  test-powershell51:
+    name: test (powershell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester 5
+        shell: powershell
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck -Scope CurrentUser
+          $pester = Get-Module -ListAvailable Pester |
+            Where-Object { $_.Version -ge [version]'5.0.0' } |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+          if (-not $pester) {
+            Write-Error 'Pester 5+ not available after Install-Module'
+            exit 1
+          }
+          Write-Host "Pester $($pester.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
+      - name: Run tests
+        shell: powershell
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
+          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
           $r = Invoke-Pester -Path tests -PassThru -Output Detailed
           if ($null -eq $r) { Write-Error 'Invoke-Pester returned null'; exit 1 }
           if ($r.Result -ne 'Passed' -or $r.FailedCount -gt 0 -or $r.TotalCount -lt 9) {
