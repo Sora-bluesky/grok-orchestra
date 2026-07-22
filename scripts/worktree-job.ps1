@@ -303,6 +303,44 @@ function Assert-WorktreeIdentity {
   return $resolvedMeta
 }
 
+function Try-ClaimWorktreeMeta {
+  <#
+    Atomically create .worktree.json with FileMode.CreateNew (NTFS exclusive create).
+    Returns $true if THIS call owns the JobId; $false if the file already exists.
+  #>
+  param(
+    [string] $Path,
+    [hashtable] $Meta
+  )
+  $dir = Split-Path -Parent $Path
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $json = $Meta | ConvertTo-Json -Depth 6
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+  try {
+    $fs = [System.IO.File]::Open(
+      $Path,
+      [System.IO.FileMode]::CreateNew,
+      [System.IO.FileAccess]::Write,
+      [System.IO.FileShare]::None
+    )
+    try {
+      $fs.Write($bytes, 0, $bytes.Length)
+      $fs.Flush($true)
+    }
+    finally {
+      $fs.Dispose()
+    }
+    return $true
+  }
+  catch [System.IO.IOException] {
+    # Already exists (or sharing violation) — another owner
+    return $false
+  }
+  catch [System.UnauthorizedAccessException] {
+    return $false
+  }
+}
+
 function Invoke-New {
   param(
     [string] $ControlRoot,
@@ -317,20 +355,7 @@ function Invoke-New {
   Test-JobIdCollision -Locks $Locks -Id $Id
 
   $metaPath = Get-MetaPath -Locks $Locks -Id $Id
-  if (Test-Path -LiteralPath $metaPath) {
-    $existing = Read-Meta -Path $metaPath
-    if ([string]$existing.status -eq 'active') {
-      throw "Active L2 worktree already exists for JobId='$Id' ($metaPath)."
-    }
-    throw "L2 metadata already exists for JobId='$Id' (status=$($existing.status)). Remove or use a new JobId."
-  }
-
   $branch = "wt/$Id"
-  # Refuse reuse while branch still exists (cleanup leaves branch as evidence)
-  $branchCheck = & git -C $ControlRoot show-ref --verify --quiet "refs/heads/$branch" 2>$null
-  if ($LASTEXITCODE -eq 0) {
-    throw "Branch '$branch' still exists. Choose a new JobId or delete the branch manually after merge."
-  }
 
   $baseSha = if ([string]::IsNullOrWhiteSpace($Base)) {
     Resolve-CommitSha -WorkDir $ControlRoot -Ref 'HEAD'
@@ -342,14 +367,42 @@ function Invoke-New {
   $wtParent = Join-Path $ControlRoot '.agents\worktrees'
   New-Item -ItemType Directory -Force -Path $wtParent | Out-Null
   $wtPath = Join-Path $wtParent $Id
-  if (Test-Path -LiteralPath $wtPath) {
-    throw "Worktree directory already exists: $wtPath"
+  $canonicalPath = Get-CanonicalWorktreePath -ControlRoot $ControlRoot -JobId $Id
+  $now = Get-Date -Format o
+
+  # Atomic JobId claim (replaces TOCTOU Test-Path on metadata). CreateNew fails if any
+  # prior metadata exists (active/creating/collected/removed/stale).
+  $claimMeta = @{
+    schema_version = 1
+    job_id         = $Id
+    path           = $canonicalPath
+    branch         = $branch
+    base_sha       = $baseSha
+    status         = 'creating'
+    owned_paths    = @($Owned)
+    log_required   = $LogRequired
+    created_at     = $now
+    updated_at     = $now
+  }
+  $claimed = Try-ClaimWorktreeMeta -Path $metaPath -Meta $claimMeta
+  if (-not $claimed) {
+    # Another new owns this JobId (or leftover claim). Touch NOTHING.
+    throw "L2 JobId '$Id' is already claimed (metadata exists at $metaPath). Another new owns this JobId or clear a stale claim via check.ps1 -Fix."
   }
 
   try {
+    # Post-claim exclusive checks: only the claim owner may refuse and roll back.
+    & git -C $ControlRoot show-ref --verify --quiet "refs/heads/$branch" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      throw "Branch '$branch' still exists. Choose a new JobId or delete the branch manually after merge."
+    }
+    if (Test-Path -LiteralPath $wtPath) {
+      throw "Worktree directory already exists: $wtPath"
+    }
+
     Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'add', '-b', $branch, $wtPath, $baseSha) | Out-Null
     $resolvedPath = (Resolve-Path -LiteralPath $wtPath).Path
-    $now = Get-Date -Format o
+    $activeAt = Get-Date -Format o
     $meta = @{
       schema_version = 1
       job_id         = $Id
@@ -360,26 +413,24 @@ function Invoke-New {
       owned_paths    = @($Owned)
       log_required   = $LogRequired
       created_at     = $now
-      updated_at     = $now
+      updated_at     = $activeAt
     }
     Write-Meta -Path $metaPath -Meta $meta
     # Machine-readable single line for delegate parsing
     Write-Output ("path={0};branch={1};base_sha={2};status=active" -f $resolvedPath, $branch, $baseSha)
   }
   catch {
-    # Best-effort rollback even when worktree add created the branch but failed before
-    # $createdWorktree would have been set (Windows path/populate failure leaves orphan wt/<Id>).
+    # Safe: exclusive claim means no concurrent new can be mid-flight on this JobId.
+    # Only roll back state this owner may have created.
     if (Test-Path -LiteralPath $wtPath) {
       try { & git -C $ControlRoot worktree remove --force $wtPath 2>$null | Out-Null } catch { }
       if (Test-Path -LiteralPath $wtPath) {
-        # Only delete the canonical L2 path — never escalate outside the subtree (F10).
         if (Test-IsCanonicalL2Path -Candidate $wtPath -ControlRoot $ControlRoot -JobId $Id) {
           Remove-Item -LiteralPath $wtPath -Recurse -Force -ErrorAction SilentlyContinue
         }
       }
       try { & git -C $ControlRoot worktree prune 2>$null | Out-Null } catch { }
     }
-    # Always attempt branch delete (covers add-failed-after-branch-create residue)
     try { & git -C $ControlRoot branch -D $branch 2>$null | Out-Null } catch { }
     if (Test-Path -LiteralPath $metaPath) {
       Remove-Item -LiteralPath $metaPath -Force -ErrorAction SilentlyContinue

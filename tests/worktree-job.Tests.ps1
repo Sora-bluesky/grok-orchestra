@@ -69,7 +69,7 @@ Describe 'worktree-job.ps1' {
     }
     catch { $err = $_ }
     $err | Should -Not -BeNullOrEmpty
-    "$err" | Should -Match 'already exists'
+    "$err" | Should -Match 'already claimed|already exists|metadata exists'
   }
 
   It 'new rejects unsafe JobId' {
@@ -225,6 +225,8 @@ Describe 'worktree-job.ps1' {
   }
 
   It 'new refuses JobId reuse when wt/<Id> branch exists without metadata' {
+    # Exclusive claim succeeds first; post-claim branch check refuses; owner rollback clears claim
+    # and may delete the orphan branch (safe: claim owner, no concurrent new mid-flight).
     $sha = (git -C $script:Repo rev-parse HEAD).Trim()
     git -C $script:Repo branch 'wt/reuse1' $sha | Out-Null
     git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/reuse1'
@@ -238,6 +240,38 @@ Describe 'worktree-job.ps1' {
     catch { $err = $_ }
     $err | Should -Not -BeNullOrEmpty
     "$err" | Should -Match 'still exists'
+    Test-Path -LiteralPath (Join-Path $script:LockDir 'reuse1.worktree.json') | Should -BeFalse
+  }
+
+  It 'same-JobId new after winner already owns claim refuses and does not destroy winner' {
+    # Deterministic race: A already won (active worktree + branch + metadata).
+    & $script:WtScript -Action new -JobId 'race1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'race1.worktree.json'
+    $metaBefore = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaBefore.status | Should -Be 'active'
+    $winnerPath = $metaBefore.path
+    $marker = Join-Path $winnerPath 'WINNER_MARKER.txt'
+    Set-Content -LiteralPath $marker -Value 'owned-by-A' -Encoding UTF8
+    $branchShaBefore = (git -C $script:Repo rev-parse 'wt/race1').Trim()
+
+    $err = $null
+    try {
+      & $script:WtScript -Action new -JobId 'race1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'already claimed|already exists|metadata exists'
+
+    # Winner intact: dir, marker, branch, active metadata
+    Test-Path -LiteralPath $winnerPath | Should -BeTrue
+    Test-Path -LiteralPath $marker | Should -BeTrue
+    (Get-Content -LiteralPath $marker -Raw).Trim() | Should -Be 'owned-by-A'
+    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/race1'
+    $LASTEXITCODE | Should -Be 0
+    (git -C $script:Repo rev-parse 'wt/race1').Trim() | Should -Be $branchShaBefore
+    $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaAfter.status | Should -Be 'active'
+    $metaAfter.path | Should -Be $winnerPath
   }
 
   It 'new rolls back orphan branch residue when worktree add fails after -b' {
@@ -287,6 +321,30 @@ Describe 'check.ps1 L2 worktree stale detection' {
   BeforeEach {
     $script:TestLockDir = Join-Path $TestDrive ("locks-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $script:TestLockDir | Out-Null
+  }
+
+  It 'clears stale status=creating claim with -Fix when no dir and no branch' {
+    $metaPath = Join-Path $script:TestLockDir 'staleclaim.worktree.json'
+    @{
+      schema_version = 1
+      job_id         = 'staleclaim'
+      path           = (Join-Path $TestDrive 'no-such-wt')
+      branch         = 'wt/staleclaim'
+      base_sha       = '0000000000000000000000000000000000000000'
+      status         = 'creating'
+      owned_paths    = @()
+      log_required   = $false
+      created_at     = '2026-01-01T00:00:00Z'
+      updated_at     = '2026-01-01T00:00:00Z'
+    } | ConvertTo-Json | Set-Content -LiteralPath $metaPath -Encoding UTF8
+
+    $out1 = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:OrchestraRoot -SkipToolCheck *>&1
+    ($out1 | ForEach-Object { "$_" } | Out-String) | Should -Match 'stale claim|status=creating'
+    Test-Path -LiteralPath $metaPath | Should -BeTrue
+
+    $out2 = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:OrchestraRoot -SkipToolCheck -Fix *>&1
+    ($out2 | ForEach-Object { "$_" } | Out-String) | Should -Match 'claim file removed'
+    Test-Path -LiteralPath $metaPath | Should -BeFalse
   }
 
   It 'warns when active worktree directory is missing; -Fix marks stale' {

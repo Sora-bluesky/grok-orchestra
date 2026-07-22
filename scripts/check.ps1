@@ -202,7 +202,8 @@ if (Test-Path -LiteralPath $LockDir) {
       continue
     }
     $status = [string]$wt.status
-    if ($status -ne 'active' -and $status -ne 'collected') { continue }
+    # active/collected: live L2; creating: exclusive new claim (may be mid-flight or crashed)
+    if ($status -ne 'active' -and $status -ne 'collected' -and $status -ne 'creating') { continue }
     $jid = [string]$wt.job_id
     $wtPath = [string]$wt.path
     $branch = [string]$wt.branch
@@ -232,6 +233,29 @@ if (Test-Path -LiteralPath $LockDir) {
     }
     else {
       $detail.Add('branch missing') | Out-Null
+    }
+
+    # status=creating: crashed mid-new is WARN; -Fix clears only when no dir and no branch
+    if ($status -eq 'creating') {
+      $gitProbeFailedCreating = $branchProbeFailed
+      if ($gitProbeFailedCreating) {
+        $results.Add((Write-CheckResult WARN "worktree:$jid" "status=creating; git probe failed — not clearing claim")) | Out-Null
+        continue
+      }
+      $provablyStale = (-not $dirOk) -and (-not $branchOk)
+      if ($provablyStale) {
+        if ($Fix) {
+          Remove-Item -LiteralPath $file.FullName -Force
+          $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating with no dir/branch; claim file removed (-Fix)')) | Out-Null
+        }
+        else {
+          $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating with no dir/branch (stale claim); re-run with -Fix to clear')) | Out-Null
+        }
+      }
+      else {
+        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating (in progress or partial); not auto-cleared')) | Out-Null
+      }
+      continue
     }
 
     $regPath = $null
