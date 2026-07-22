@@ -289,9 +289,12 @@ Describe 'worktree-job.ps1' {
   It 'collect refuses detached HEAD in the worktree' {
     & $script:WtScript -Action new -JobId 'detach1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
     $meta = Get-Content -LiteralPath (Join-Path $script:LockDir 'detach1.worktree.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    # Detach HEAD at current commit
+    # Detach HEAD at current commit (PS 5.1 + ErrorAction Stop treats git stderr as error)
     $head = (git -C $meta.path rev-parse HEAD).Trim()
-    git -C $meta.path checkout --detach $head 2>$null | Out-Null
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & git -C $meta.path checkout --detach $head 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
 
     $err = $null
     try {
