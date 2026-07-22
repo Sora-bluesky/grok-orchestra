@@ -122,7 +122,7 @@ function Read-Meta {
     return (Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json)
   }
   catch {
-    throw "Invalid L2 metadata JSON: $Path — $($_.Exception.Message)"
+    throw "Invalid L2 metadata JSON: $Path - $($_.Exception.Message)"
   }
 }
 
@@ -201,7 +201,7 @@ function Get-CanonicalWorktreePath {
 function Test-IsCanonicalL2Path {
   <#
     True only when Candidate equals the canonical L2 worktree directory for JobId
-    (or is a path strictly under it). Control root and any path outside L2 → false.
+    (or is a path strictly under it). Control root and any path outside L2 -> false.
   #>
   param(
     [string] $Candidate,
@@ -333,7 +333,7 @@ function Try-ClaimWorktreeMeta {
     return $true
   }
   catch [System.IO.IOException] {
-    # Already exists (or sharing violation) — another owner
+    # Already exists (or sharing violation) - another owner
     return $false
   }
   catch [System.UnauthorizedAccessException] {
@@ -394,7 +394,7 @@ function Invoke-New {
   # Only remove a worktree this process actually created via successful `git worktree add`.
   $createdWorktree = $false
   try {
-    # Post-claim checks: if these throw, createdWorktree stays false → catch removes only claim.
+    # Post-claim checks: if these throw, createdWorktree stays false -> catch removes only claim.
     & git -C $ControlRoot show-ref --verify --quiet "refs/heads/$branch" 2>$null
     if ($LASTEXITCODE -eq 0) {
       throw "Branch '$branch' still exists. Choose a new JobId or delete the branch manually after merge."
@@ -494,7 +494,7 @@ function Invoke-Collect {
 
   $meta.status = 'collected'
   $meta.updated_at = Get-Date -Format o
-  # ConvertFrom-Json object → rewrite via hashtable-like properties
+  # ConvertFrom-Json object -> rewrite via hashtable-like properties
   $updated = @{
     schema_version = [int]$meta.schema_version
     job_id         = [string]$meta.job_id
@@ -561,7 +561,7 @@ function Invoke-Cleanup {
     }
     catch {
       if ($ForceRemove) {
-        # Last resort: only Remove-Item the canonical L2 worktree path — never control root
+        # Last resort: only Remove-Item the canonical L2 worktree path - never control root
         if (-not (Test-IsCanonicalL2Path -Candidate $resolved -ControlRoot $ControlRoot -JobId $Id)) {
           throw "Refusing last-resort Remove-Item outside L2 subtree: $resolved"
         }

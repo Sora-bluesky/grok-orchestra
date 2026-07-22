@@ -124,7 +124,7 @@ if ($Worktree) {
     if (-not (Test-Path -LiteralPath $execRoot)) {
       Write-Error "L2 worktree path missing after new: $execRoot"
     }
-    Write-Host "delegate-codex: L2 worktree mode — skip L0 write-job.lock and L1 lease; exec -C $execRoot"
+    Write-Host "delegate-codex: L2 worktree mode - skip L0 write-job.lock and L1 lease; exec -C $execRoot"
   }
 }
 

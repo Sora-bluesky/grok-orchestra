@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Mechanical verification gate (judge only — never commit/merge/fix).
+  Mechanical verification gate (judge only - never commit/merge/fix).
 .PARAMETER JobId
   Job id used for Codex log path .agents/logs/codex/{JobId}.last.txt
 .PARAMETER OwnedPaths
@@ -63,7 +63,7 @@ function ConvertTo-StringArray {
   if ($null -eq $Value) {
     return , ([string[]]@())
   }
-  # Strings are IEnumerable[char] — must not foreach the characters.
+  # Strings are IEnumerable[char] - must not foreach the characters.
   if ($Value -is [string]) {
     return , ([string[]]@([string]$Value))
   }
@@ -150,7 +150,7 @@ function Invoke-GitRaw {
 
 function Split-GitNulRecords {
   # Always return a flat string[] via ConvertTo-StringArray (never unary-comma nested).
-  # PS 5.1 compatible: split on [char]0 — NOT `u{0} (PS 6+ only).
+  # PS 5.1 compatible: split on [char]0 - NOT `u{0} (PS 6+ only).
   param([string] $Raw)
   if ([string]::IsNullOrEmpty($Raw)) {
     return , ([string[]]@())
@@ -210,7 +210,7 @@ function Get-UntrackedPaths {
     $xy = $rec.Substring(0, 2)
     $path = if ($rec.Length -gt 3 -and $rec[2] -eq ' ') { $rec.Substring(3) } else { $rec.Substring(2) }
     $path = ConvertTo-RepoSlashPath $path
-    # Rename/copy: next NUL field is the other path — skip it for untracked listing.
+    # Rename/copy: next NUL field is the other path - skip it for untracked listing.
     if ($xy -match '^[RC]') {
       $i += 2
       continue
@@ -353,7 +353,7 @@ function Test-UnderOwnedPaths {
     [string] $Path,
     [string[]] $Owned
   )
-  # Segment normalize (shared with lease-paths). Never TrimStart('.') — that strips ".agents".
+  # Segment normalize (shared with lease-paths). Never TrimStart('.') - that strips ".agents".
   $p = ConvertTo-NormalizedRepoPath -Path $Path
   if (-not $p) { return $false }
   foreach ($o in $Owned) {
@@ -465,7 +465,7 @@ if (-not $fail) {
     $items.Add((Write-Item WARN 'scan' ("skipped {0} (size > 1MB)" -f $skippedPath))) | Out-Null
   }
 
-  # 4. Test weakening (F07) — staged + unstaged
+  # 4. Test weakening (F07) - staged + unstaged
   $testDeleteHits = @($deleted | Where-Object { Test-IsTestLikePath $_ })
   $skipHits = @()
   foreach ($line in $addedLines) {

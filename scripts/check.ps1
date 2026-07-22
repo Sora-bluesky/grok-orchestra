@@ -86,7 +86,7 @@ if (Test-Path -LiteralPath $writeLock) {
   $lockText = Get-Content -LiteralPath $writeLock -Raw -Encoding UTF8
   $pidMatch = [regex]::Match($lockText, '(?m)^pid=(\d+)\s*$')
   if (-not $pidMatch.Success) {
-    $results.Add((Write-CheckResult WARN 'lock:write-job' 'legacy lock without pid=; not auto-removed — confirm manually')) | Out-Null
+    $results.Add((Write-CheckResult WARN 'lock:write-job' 'legacy lock without pid=; not auto-removed - confirm manually')) | Out-Null
   }
   else {
     $lockPid = [int]$pidMatch.Groups[1].Value
@@ -241,7 +241,7 @@ if (Test-Path -LiteralPath $LockDir) {
     if ($status -eq 'creating') {
       $gitProbeFailedCreating = $branchProbeFailed
       if ($gitProbeFailedCreating) {
-        $results.Add((Write-CheckResult WARN "worktree:$jid" "status=creating; git probe failed — not clearing claim")) | Out-Null
+        $results.Add((Write-CheckResult WARN "worktree:$jid" "status=creating; git probe failed - not clearing claim")) | Out-Null
         continue
       }
       $provablyEmpty = (-not $dirOk) -and (-not $branchOk)
@@ -271,7 +271,7 @@ if (Test-Path -LiteralPath $LockDir) {
         $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating recent (no dir/branch yet); not auto-cleared')) | Out-Null
       }
       else {
-        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating (in progress or partial); not auto-cleared — Operator cleans manually')) | Out-Null
+        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating (in progress or partial); not auto-cleared - Operator cleans manually')) | Out-Null
       }
       continue
     }
@@ -309,7 +309,7 @@ if (Test-Path -LiteralPath $LockDir) {
     $msg = ($detail -join '; ')
     # Do not destructively rewrite metadata when a git probe itself failed
     if ($gitProbeFailed) {
-      $results.Add((Write-CheckResult WARN "worktree:$jid" "$msg; git probe failed — not marking stale")) | Out-Null
+      $results.Add((Write-CheckResult WARN "worktree:$jid" "$msg; git probe failed - not marking stale")) | Out-Null
       continue
     }
     if ($Fix) {
