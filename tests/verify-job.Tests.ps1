@@ -3,6 +3,7 @@
 
 Describe 'verify-job.ps1' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:VerifyScript = Join-Path $script:OrchestraRoot 'scripts\verify-job.ps1'
   }
@@ -24,7 +25,12 @@ Describe 'verify-job.ps1' {
   }
 
   AfterEach {
-    Pop-Location
+    try { Pop-Location } catch { }
+    Clear-TestDriveAfterGit -RepoRoot $script:Repo -DriveRoot $TestDrive
+  }
+
+  AfterAll {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   It 'passes on clean tree with -SkipLog' {

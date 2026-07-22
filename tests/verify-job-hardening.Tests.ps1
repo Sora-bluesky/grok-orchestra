@@ -3,6 +3,7 @@
 
 Describe 'verify-job.ps1 hardening (plan 005)' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:VerifyScript = Join-Path $script:OrchestraRoot 'scripts\verify-job.ps1'
   }
@@ -21,7 +22,12 @@ Describe 'verify-job.ps1 hardening (plan 005)' {
   }
 
   AfterEach {
-    Pop-Location
+    try { Pop-Location } catch { }
+    Clear-TestDriveAfterGit -RepoRoot $script:Repo -DriveRoot $TestDrive
+  }
+
+  AfterAll {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   It 'treats non-ASCII untracked path as outside OwnedPaths (no quote mangling)' {

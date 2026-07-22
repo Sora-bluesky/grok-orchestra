@@ -3,6 +3,7 @@
 
 Describe 'worktree-job.ps1' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:WtScript = Join-Path $script:OrchestraRoot 'scripts\worktree-job.ps1'
   }
@@ -24,21 +25,12 @@ Describe 'worktree-job.ps1' {
   }
 
   AfterEach {
-    # Best-effort cleanup of worktrees so TestDrive can be removed
-    try {
-      $list = git -C $script:Repo worktree list --porcelain 2>$null
-      foreach ($line in ($list -split "`r?`n")) {
-        if ($line -match '^worktree (.+)$') {
-          $p = $Matches[1]
-          if ($p -ne $script:Repo) {
-            git -C $script:Repo worktree remove --force $p 2>$null | Out-Null
-          }
-        }
-      }
-      git -C $script:Repo worktree prune 2>$null | Out-Null
-    }
-    catch { }
-    Pop-Location
+    try { Pop-Location } catch { }
+    Clear-TestDriveAfterGit -RepoRoot $script:Repo -DriveRoot $TestDrive
+  }
+
+  AfterAll {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   It 'new creates worktree, branch, and metadata; emits machine-readable path line' {
@@ -313,6 +305,7 @@ Describe 'worktree-job.ps1' {
 
 Describe 'check.ps1 L2 worktree stale detection' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:CheckScript = Join-Path $script:OrchestraRoot 'scripts\check.ps1'
     $script:WtScript = Join-Path $script:OrchestraRoot 'scripts\worktree-job.ps1'
@@ -321,6 +314,14 @@ Describe 'check.ps1 L2 worktree stale detection' {
   BeforeEach {
     $script:TestLockDir = Join-Path $TestDrive ("locks-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $script:TestLockDir | Out-Null
+  }
+
+  AfterEach {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
+  }
+
+  AfterAll {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   It 'check.ps1 -Fix leaves recent creating claim; clears aged empty creating claim' {
@@ -440,22 +441,14 @@ Describe 'check.ps1 L2 worktree stale detection' {
       $metaAfter.status | Should -Be 'active'
     }
     finally {
-      try {
-        $list = git -C $repo worktree list --porcelain 2>$null
-        foreach ($line in ($list -split "`r?`n")) {
-          if ($line -match '^worktree (.+)$') {
-            $p = $Matches[1]
-            if ($p -ne $repo) { git -C $repo worktree remove --force $p 2>$null | Out-Null }
-          }
-        }
-      }
-      catch { }
+      Clear-TestDriveAfterGit -RepoRoot $repo -DriveRoot $TestDrive
     }
   }
 }
 
 Describe 'delegate-codex.ps1 -Worktree skips L0 lock' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:DelegateScript = Join-Path $script:OrchestraRoot 'scripts\delegate-codex.ps1'
     $script:OrigPath = $env:PATH
@@ -465,6 +458,7 @@ Describe 'delegate-codex.ps1 -Worktree skips L0 lock' {
   AfterAll {
     if ($null -ne $script:OrigPath) { $env:PATH = $script:OrigPath }
     if ($null -ne $script:OrigAppData) { $env:APPDATA = $script:OrigAppData }
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   BeforeEach {
@@ -534,18 +528,7 @@ Test L2 skip lock.
   }
 
   AfterEach {
-    try {
-      $list = git -C $script:Repo worktree list --porcelain 2>$null
-      foreach ($line in ($list -split "`r?`n")) {
-        if ($line -match '^worktree (.+)$') {
-          $p = $Matches[1]
-          if ($p -ne $script:Repo) {
-            git -C $script:Repo worktree remove --force $p 2>$null | Out-Null
-          }
-        }
-      }
-    }
-    catch { }
+    Clear-TestDriveAfterGit -RepoRoot $script:Repo -DriveRoot $TestDrive
   }
 
   It 'implement -Worktree does not create main-tree write-job.lock' {

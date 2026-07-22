@@ -4,29 +4,32 @@ on:
     branches: [main]
   pull_request:
 jobs:
+  # Pinned Pester 5.7.1 — matches local gate. Do not use MinimumVersion-only:
+  # runners can install Pester 6.x, whose TestDrive teardown fails on Windows
+  # git read-only objects under $TestDrive (Access denied). Tests also clear
+  # RO attrs via tests/helpers/Clear-TestDriveGit.ps1 before teardown.
   test-pwsh:
     name: test (pwsh)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Pester 5
+      - name: Install Pester 5.7.1 (pinned)
         shell: pwsh
         run: |
-          Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck -Scope CurrentUser
-          $pester = Get-Module -ListAvailable Pester |
-            Where-Object { $_.Version -ge [version]'5.0.0' } |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-          if (-not $pester) {
-            Write-Error 'Pester 5+ not available after Install-Module'
+          $pin = '5.7.1'
+          Install-Module Pester -RequiredVersion $pin -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -RequiredVersion $pin -ErrorAction Stop
+          $m = Get-Module Pester
+          Write-Host "Pester $($m.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
+          if ($m.Version.ToString() -ne $pin) {
+            Write-Error "Expected Pester $pin, got $($m.Version)"
             exit 1
           }
-          Write-Host "Pester $($pester.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
       - name: Run tests
         shell: pwsh
         run: |
-          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
-          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
+          Import-Module Pester -RequiredVersion 5.7.1 -ErrorAction Stop
+          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition) Pester=$((Get-Module Pester).Version)"
           $r = Invoke-Pester -Path tests -PassThru -Output Detailed
           if ($null -eq $r) { Write-Error 'Invoke-Pester returned null'; exit 1 }
           if ($r.Result -ne 'Passed' -or $r.FailedCount -gt 0 -or $r.TotalCount -lt 9) {
@@ -40,24 +43,23 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Pester 5
+      - name: Install Pester 5.7.1 (pinned)
         shell: powershell
         run: |
-          Install-Module Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck -Scope CurrentUser
-          $pester = Get-Module -ListAvailable Pester |
-            Where-Object { $_.Version -ge [version]'5.0.0' } |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-          if (-not $pester) {
-            Write-Error 'Pester 5+ not available after Install-Module'
+          $pin = '5.7.1'
+          Install-Module Pester -RequiredVersion $pin -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -RequiredVersion $pin -ErrorAction Stop
+          $m = Get-Module Pester
+          Write-Host "Pester $($m.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
+          if ($m.Version.ToString() -ne $pin) {
+            Write-Error "Expected Pester $pin, got $($m.Version)"
             exit 1
           }
-          Write-Host "Pester $($pester.Version) shell=$($PSVersionTable.PSVersion) edition=$($PSVersionTable.PSEdition)"
       - name: Run tests
         shell: powershell
         run: |
-          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
-          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition)"
+          Import-Module Pester -RequiredVersion 5.7.1 -ErrorAction Stop
+          Write-Host "PSVersion=$($PSVersionTable.PSVersion) PSEdition=$($PSVersionTable.PSEdition) Pester=$((Get-Module Pester).Version)"
           $r = Invoke-Pester -Path tests -PassThru -Output Detailed
           if ($null -eq $r) { Write-Error 'Invoke-Pester returned null'; exit 1 }
           if ($r.Result -ne 'Passed' -or $r.FailedCount -gt 0 -or $r.TotalCount -lt 9) {
