@@ -390,8 +390,11 @@ function Invoke-New {
     throw "L2 JobId '$Id' is already claimed (metadata exists at $metaPath). Another new owns this JobId or clear a stale claim via check.ps1 -Fix."
   }
 
+  # Non-destructive failure path: never delete branches in rollback (retained as evidence).
+  # Only remove a worktree this process actually created via successful `git worktree add`.
+  $createdWorktree = $false
   try {
-    # Post-claim exclusive checks: only the claim owner may refuse and roll back.
+    # Post-claim checks: if these throw, createdWorktree stays false → catch removes only claim.
     & git -C $ControlRoot show-ref --verify --quiet "refs/heads/$branch" 2>$null
     if ($LASTEXITCODE -eq 0) {
       throw "Branch '$branch' still exists. Choose a new JobId or delete the branch manually after merge."
@@ -401,6 +404,7 @@ function Invoke-New {
     }
 
     Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'add', '-b', $branch, $wtPath, $baseSha) | Out-Null
+    $createdWorktree = $true
     $resolvedPath = (Resolve-Path -LiteralPath $wtPath).Path
     $activeAt = Get-Date -Format o
     $meta = @{
@@ -420,18 +424,19 @@ function Invoke-New {
     Write-Output ("path={0};branch={1};base_sha={2};status=active" -f $resolvedPath, $branch, $baseSha)
   }
   catch {
-    # Safe: exclusive claim means no concurrent new can be mid-flight on this JobId.
-    # Only roll back state this owner may have created.
-    if (Test-Path -LiteralPath $wtPath) {
-      try { & git -C $ControlRoot worktree remove --force $wtPath 2>$null | Out-Null } catch { }
+    # Release exclusive claim only. Branch is never deleted here.
+    # Worktree remove only if THIS process completed `git worktree add`.
+    if ($createdWorktree) {
       if (Test-Path -LiteralPath $wtPath) {
-        if (Test-IsCanonicalL2Path -Candidate $wtPath -ControlRoot $ControlRoot -JobId $Id) {
-          Remove-Item -LiteralPath $wtPath -Recurse -Force -ErrorAction SilentlyContinue
+        try { & git -C $ControlRoot worktree remove --force $wtPath 2>$null | Out-Null } catch { }
+        if (Test-Path -LiteralPath $wtPath) {
+          if (Test-IsCanonicalL2Path -Candidate $wtPath -ControlRoot $ControlRoot -JobId $Id) {
+            Remove-Item -LiteralPath $wtPath -Recurse -Force -ErrorAction SilentlyContinue
+          }
         }
+        try { & git -C $ControlRoot worktree prune 2>$null | Out-Null } catch { }
       }
-      try { & git -C $ControlRoot worktree prune 2>$null | Out-Null } catch { }
     }
-    try { & git -C $ControlRoot branch -D $branch 2>$null | Out-Null } catch { }
     if (Test-Path -LiteralPath $metaPath) {
       Remove-Item -LiteralPath $metaPath -Force -ErrorAction SilentlyContinue
     }

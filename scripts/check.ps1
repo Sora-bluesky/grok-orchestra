@@ -235,25 +235,43 @@ if (Test-Path -LiteralPath $LockDir) {
       $detail.Add('branch missing') | Out-Null
     }
 
-    # status=creating: crashed mid-new is WARN; -Fix clears only when no dir and no branch
+    # status=creating: exclusive new claim. Never clear a live/recent claim.
+    # -Fix may remove claim only when: no dir, no branch, AND created_at older than age gate.
+    # Partial (dir and/or branch present) is always WARN for Operator manual cleanup.
     if ($status -eq 'creating') {
       $gitProbeFailedCreating = $branchProbeFailed
       if ($gitProbeFailedCreating) {
         $results.Add((Write-CheckResult WARN "worktree:$jid" "status=creating; git probe failed — not clearing claim")) | Out-Null
         continue
       }
-      $provablyStale = (-not $dirOk) -and (-not $branchOk)
-      if ($provablyStale) {
-        if ($Fix) {
-          Remove-Item -LiteralPath $file.FullName -Force
-          $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating with no dir/branch; claim file removed (-Fix)')) | Out-Null
+      $provablyEmpty = (-not $dirOk) -and (-not $branchOk)
+      $ageMinutes = 15
+      $isAged = $false
+      $createdRaw = [string]$wt.created_at
+      if (-not [string]::IsNullOrWhiteSpace($createdRaw)) {
+        try {
+          $createdAt = [datetimeoffset]::Parse($createdRaw, [System.Globalization.CultureInfo]::InvariantCulture)
+          $isAged = (([datetimeoffset]::UtcNow - $createdAt.ToUniversalTime()).TotalMinutes -ge $ageMinutes)
         }
-        else {
-          $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating with no dir/branch (stale claim); re-run with -Fix to clear')) | Out-Null
+        catch {
+          # Unparseable created_at: treat as not aged (do not auto-clear)
+          $isAged = $false
         }
       }
+      if ($provablyEmpty -and $isAged) {
+        if ($Fix) {
+          Remove-Item -LiteralPath $file.FullName -Force
+          $results.Add((Write-CheckResult WARN "worktree:$jid" ("status=creating aged >={0}m with no dir/branch; claim file removed (-Fix)" -f $ageMinutes))) | Out-Null
+        }
+        else {
+          $results.Add((Write-CheckResult WARN "worktree:$jid" ("status=creating aged >={0}m with no dir/branch (stale claim); re-run with -Fix to clear" -f $ageMinutes))) | Out-Null
+        }
+      }
+      elseif ($provablyEmpty -and -not $isAged) {
+        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating recent (no dir/branch yet); not auto-cleared')) | Out-Null
+      }
       else {
-        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating (in progress or partial); not auto-cleared')) | Out-Null
+        $results.Add((Write-CheckResult WARN "worktree:$jid" 'status=creating (in progress or partial); not auto-cleared — Operator cleans manually')) | Out-Null
       }
       continue
     }

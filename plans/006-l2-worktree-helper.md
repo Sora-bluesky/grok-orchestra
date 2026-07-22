@@ -141,3 +141,4 @@ Phase 3 送りになっていた最後の隔離レイヤー。**設計原則: wo
 
 - `wt/*` ブランチの棚卸し(マージ済み・放置)は将来の check.ps1 拡張候補
 - plan 007(アダプタ)が go になった場合、`-Worktree` は runtime 非依存の共通機能として維持
+- **Safe trade (post replan)**: `new` failure path never deletes branches; worktree remove only if this process completed `git worktree add`. A crashed partial `new` (`status=creating` + dir/branch) is **not** auto-cleared — `check.ps1` WARNs; Operator cleans manually. Aged empty `creating` claims (≥15m, no dir/branch) may be cleared with `-Fix`.

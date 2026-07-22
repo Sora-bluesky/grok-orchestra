@@ -225,8 +225,7 @@ Describe 'worktree-job.ps1' {
   }
 
   It 'new refuses JobId reuse when wt/<Id> branch exists without metadata' {
-    # Exclusive claim succeeds first; post-claim branch check refuses; owner rollback clears claim
-    # and may delete the orphan branch (safe: claim owner, no concurrent new mid-flight).
+    # Pre-existing branch must survive refusal (no branch -D in rollback).
     $sha = (git -C $script:Repo rev-parse HEAD).Trim()
     git -C $script:Repo branch 'wt/reuse1' $sha | Out-Null
     git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/reuse1'
@@ -240,7 +239,11 @@ Describe 'worktree-job.ps1' {
     catch { $err = $_ }
     $err | Should -Not -BeNullOrEmpty
     "$err" | Should -Match 'still exists'
+    # Claim released; pre-existing branch retained
     Test-Path -LiteralPath (Join-Path $script:LockDir 'reuse1.worktree.json') | Should -BeFalse
+    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/reuse1'
+    $LASTEXITCODE | Should -Be 0
+    (git -C $script:Repo rev-parse 'wt/reuse1').Trim() | Should -Be $sha
   }
 
   It 'same-JobId new after winner already owns claim refuses and does not destroy winner' {
@@ -274,9 +277,9 @@ Describe 'worktree-job.ps1' {
     $metaAfter.path | Should -Be $winnerPath
   }
 
-  It 'new rolls back orphan branch residue when worktree add fails after -b' {
-    # Block path with a file so git worktree add may create branch then fail on populate,
-    # or fail early — either way branch must not remain after the failed new.
+  It 'new releases claim on worktree-add failure without force-deleting branches' {
+    # Block path with a file so git worktree add fails. Rollback must release claim only;
+    # never branch -D (any branch residue is Operator evidence, not auto-deleted).
     $blockParent = Join-Path $script:Repo '.agents\worktrees'
     New-Item -ItemType Directory -Force -Path $blockParent | Out-Null
     $blockPath = Join-Path $blockParent 'roll1'
@@ -288,9 +291,6 @@ Describe 'worktree-job.ps1' {
     }
     catch { $err = $_ }
     $err | Should -Not -BeNullOrEmpty
-
-    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/roll1'
-    $LASTEXITCODE | Should -Not -Be 0
     Test-Path -LiteralPath (Join-Path $script:LockDir 'roll1.worktree.json') | Should -BeFalse
   }
 
@@ -323,28 +323,46 @@ Describe 'check.ps1 L2 worktree stale detection' {
     New-Item -ItemType Directory -Force -Path $script:TestLockDir | Out-Null
   }
 
-  It 'clears stale status=creating claim with -Fix when no dir and no branch' {
-    $metaPath = Join-Path $script:TestLockDir 'staleclaim.worktree.json'
+  It 'check.ps1 -Fix leaves recent creating claim; clears aged empty creating claim' {
+    $recentPath = Join-Path $script:TestLockDir 'recentclaim.worktree.json'
+    $agedPath = Join-Path $script:TestLockDir 'agedclaim.worktree.json'
+    $now = [datetimeoffset]::UtcNow.ToString('o')
+    $old = ([datetimeoffset]::UtcNow.AddMinutes(-20)).ToString('o')
+
     @{
       schema_version = 1
-      job_id         = 'staleclaim'
-      path           = (Join-Path $TestDrive 'no-such-wt')
-      branch         = 'wt/staleclaim'
+      job_id         = 'recentclaim'
+      path           = (Join-Path $TestDrive 'no-such-recent')
+      branch         = 'wt/recentclaim'
       base_sha       = '0000000000000000000000000000000000000000'
       status         = 'creating'
       owned_paths    = @()
       log_required   = $false
-      created_at     = '2026-01-01T00:00:00Z'
-      updated_at     = '2026-01-01T00:00:00Z'
-    } | ConvertTo-Json | Set-Content -LiteralPath $metaPath -Encoding UTF8
+      created_at     = $now
+      updated_at     = $now
+    } | ConvertTo-Json | Set-Content -LiteralPath $recentPath -Encoding UTF8
 
-    $out1 = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:OrchestraRoot -SkipToolCheck *>&1
-    ($out1 | ForEach-Object { "$_" } | Out-String) | Should -Match 'stale claim|status=creating'
-    Test-Path -LiteralPath $metaPath | Should -BeTrue
+    @{
+      schema_version = 1
+      job_id         = 'agedclaim'
+      path           = (Join-Path $TestDrive 'no-such-aged')
+      branch         = 'wt/agedclaim'
+      base_sha       = '0000000000000000000000000000000000000000'
+      status         = 'creating'
+      owned_paths    = @()
+      log_required   = $false
+      created_at     = $old
+      updated_at     = $old
+    } | ConvertTo-Json | Set-Content -LiteralPath $agedPath -Encoding UTF8
 
-    $out2 = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:OrchestraRoot -SkipToolCheck -Fix *>&1
-    ($out2 | ForEach-Object { "$_" } | Out-String) | Should -Match 'claim file removed'
-    Test-Path -LiteralPath $metaPath | Should -BeFalse
+    $out = & $script:CheckScript -LockDir $script:TestLockDir -RepoRoot $script:OrchestraRoot -SkipToolCheck -Fix *>&1
+    $text = ($out | ForEach-Object { "$_" } | Out-String)
+    $text | Should -Match 'recentclaim'
+    $text | Should -Match 'not auto-cleared'
+    $text | Should -Match 'agedclaim'
+    $text | Should -Match 'claim file removed'
+    Test-Path -LiteralPath $recentPath | Should -BeTrue
+    Test-Path -LiteralPath $agedPath | Should -BeFalse
   }
 
   It 'warns when active worktree directory is missing; -Fix marks stale' {

@@ -52,7 +52,10 @@ Or via delegate:
 ### Rules
 
 - Path: `.agents/worktrees/{job_id}/` (gitignored). Branch: `wt/{job_id}`.
-- Metadata: `.agents/locks/{job_id}.worktree.json` (gitignored) — L2 lease.
+- Metadata: `.agents/locks/{job_id}.worktree.json` (gitignored) — L2 lease / exclusive claim.
+- **`new` claims the JobId first** (`status=creating` via exclusive file create), then `git worktree add`, then flips to `status=active`.
+- **Failure path is non-destructive for branches:** rollback never runs `git branch -D`. Branches are retained as evidence; Operator deletes manually.
+- **Worktree dir removal in rollback only if this process completed `git worktree add`.** Pre-existing dirs/branches are never removed by a losing or early-failing `new`.
 - L2 write jobs **do not** take main-tree `write-job.lock` and **do not** acquire L1 leases.
 - `OwnedPaths` (if any) are stored in worktree.json and applied at collect-time verify.
 - Isolation is tree separation; still one writer **per worktree**.
@@ -62,6 +65,11 @@ Or via delegate:
 ### Doctor
 
 `scripts/check.ps1` warns on active/collected worktree.json when the directory or branch is missing; `-Fix` marks `status=stale`.
+
+`status=creating` claims:
+- **Recent** empty claim (no dir, no branch, `created_at` younger than 15 minutes): WARN only — never auto-clear (live owner may be mid-`new`).
+- **Aged** empty claim (≥15 minutes, no dir, no branch): WARN; `-Fix` may remove the claim file.
+- **Partial** (dir and/or branch present, still `creating`): WARN only — **not auto-cleared**. Operator cleans manually. Deliberate safe trade: no auto-deletion of worktrees/branches that may hold work.
 
 ## Anti-patterns
 
