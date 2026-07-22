@@ -13,7 +13,12 @@
   Path to Prompt Contract body (required fields checked lightly).
 
 .PARAMETER RepoRoot
-  Working directory for codex -C (default: repo root of this script).
+  Control-plane repository root (default: parent of scripts/).
+  With -Worktree, codex -C uses the worktree path; L2 metadata stays under RepoRoot.
+
+.PARAMETER Worktree
+  L2 mode for implement/fix: create a job worktree, run codex -C there, skip L0 lock and L1 lease.
+  For read-only types: no-op + warning.
 #>
 [CmdletBinding()]
 param(
@@ -29,7 +34,9 @@ param(
 
   [string] $RepoRoot = '',
 
-  [string[]] $OwnedPaths = @()
+  [string[]] $OwnedPaths = @(),
+
+  [switch] $Worktree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,9 +84,52 @@ New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
 $writeLock = Join-Path $lockDir 'write-job.lock'
 $isWrite = $Type -in @('implement', 'fix')
 $leaseAcquired = $false
+$useL2 = $false
+$execRoot = $root
 $leaseScript = Join-Path $root 'scripts\lease-paths.ps1'
+$worktreeScript = Join-Path $root 'scripts\worktree-job.ps1'
+# Prefer scripts next to this file when RepoRoot is a temp test tree without a full scripts copy
+if (-not (Test-Path -LiteralPath $worktreeScript)) {
+  $worktreeScript = Join-Path $PSScriptRoot 'worktree-job.ps1'
+}
+if (-not (Test-Path -LiteralPath $leaseScript)) {
+  $leaseScript = Join-Path $PSScriptRoot 'lease-paths.ps1'
+}
 
-if ($isWrite) {
+if ($Worktree) {
+  if (-not $isWrite) {
+    Write-Warning "delegate-codex: -Worktree is a no-op for read-only type='$Type' (L2 is for implement/fix only)."
+  }
+  else {
+    $useL2 = $true
+    if (-not (Test-Path -LiteralPath $worktreeScript)) {
+      Write-Error "worktree-job.ps1 not found (expected next to delegate or under RepoRoot/scripts)."
+    }
+    $wtArgs = @{
+      Action   = 'new'
+      JobId    = $JobId
+      RepoRoot = $root
+      LockDir  = $lockDir
+    }
+    if ($OwnedPaths.Count -gt 0) { $wtArgs['OwnedPaths'] = $OwnedPaths }
+    $wtOut = & $worktreeScript @wtArgs
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "worktree-job new failed for JobId=$JobId"
+    }
+    $wtLine = ($wtOut | ForEach-Object { "$_" } | Where-Object { $_ -match '^path=' } | Select-Object -Last 1)
+    if (-not $wtLine -or $wtLine -notmatch 'path=([^;]+)') {
+      Write-Error "worktree-job new did not emit path=... line. Output: $wtOut"
+    }
+    $execRoot = $Matches[1]
+    if (-not (Test-Path -LiteralPath $execRoot)) {
+      Write-Error "L2 worktree path missing after new: $execRoot"
+    }
+    Write-Host "delegate-codex: L2 worktree mode — skip L0 write-job.lock and L1 lease; exec -C $execRoot"
+  }
+}
+
+# L0 single-writer lock: main-tree only (never in L2 worktree mode)
+if ($isWrite -and -not $useL2) {
   if (Test-Path -LiteralPath $writeLock) {
     $existing = Get-Content -LiteralPath $writeLock -Raw -ErrorAction SilentlyContinue
     Write-Error "L0 single-writer: another write job is running.`n$existing`nRemove $writeLock only if stale."
@@ -94,22 +144,24 @@ pid=$PID
 
 $sandbox = if ($isWrite) { 'workspace-write' } else { 'read-only' }
 
-$logDir = Join-Path $root '.agents\logs\codex'
+# Logs: execution root (worktree when L2, else control root)
+$logDir = Join-Path $execRoot '.agents\logs\codex'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $outLast = Join-Path $logDir "$JobId.last.txt"
 $outErr = Join-Path $logDir "$JobId.stderr.log"
 $outCombined = Join-Path $logDir "$JobId.combined.log"
 
-Write-Host "delegate-codex: job=$JobId type=$Type sandbox=$sandbox cwd=$root"
+Write-Host "delegate-codex: job=$JobId type=$Type sandbox=$sandbox cwd=$execRoot l2=$useL2"
 
 $inv = Resolve-CodexNodeInvocation
 $argList = @()
 $argList += $inv.ArgsPrefix
 $argList += 'exec'
-$argList += @('-C', $root, '-s', $sandbox, '-o', $outLast)
+$argList += @('-C', $execRoot, '-s', $sandbox, '-o', $outLast)
 
 try {
-  if ($isWrite -and $OwnedPaths.Count -gt 0) {
+  # L1 leases only for main-tree write jobs (L2 stores owned_paths in worktree.json)
+  if ($isWrite -and -not $useL2 -and $OwnedPaths.Count -gt 0) {
     & $leaseScript -Action acquire -JobId $JobId -OwnedPaths $OwnedPaths -Type $Type
     if ($LASTEXITCODE -ne 0) { throw "L1 lease acquire failed for job: $JobId" }
     $leaseAcquired = $true
@@ -148,7 +200,7 @@ finally {
     try { & $leaseScript -Action release -JobId $JobId | Out-Host }
     catch { Write-Warning "L1 lease release failed for job '$JobId': $($_.Exception.Message)" }
   }
-  if ($isWrite -and (Test-Path -LiteralPath $writeLock)) {
+  if ($isWrite -and -not $useL2 -and (Test-Path -LiteralPath $writeLock)) {
     $lockContent = Get-Content -LiteralPath $writeLock -Raw -ErrorAction SilentlyContinue
     if ($lockContent -match [regex]::Escape("job_id=$JobId")) {
       Remove-Item -LiteralPath $writeLock -Force -ErrorAction SilentlyContinue

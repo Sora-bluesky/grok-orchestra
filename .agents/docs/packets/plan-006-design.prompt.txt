@@ -1,0 +1,50 @@
+## Objective
+Read-only design review of Plan 006 (L2 worktree helper). Validate the fixed design decisions before any implementation. Decline any suggestion that collect should merge/rebase/cherry-pick (F10 is non-negotiable).
+
+## Constraints
+- read-only; do not modify any files
+- Do not run network tools
+- Do not invoke codex recursively
+- Respond in Japanese
+- Keep the whole answer under 120 lines
+- Focus only on Relevant files and the design section of plans/006
+- F10 permanent rule: collect MUST NOT merge, rebase, cherry-pick, or create PRs. If you believe auto-merge is needed, state DECLINE and stop — Operator will not implement auto-merge
+- Do not invent APIs that contradict existing scripts/delegate-codex.ps1, scripts/check.ps1, scripts/verify-job.ps1
+
+## Relevant files
+- plans/006-l2-worktree-helper.md (design section is the contract to review)
+- .agents/rules/isolation.md (L2 is currently "optional later / manual")
+- .agents/docs/DESIGN.md (L2 Phase 3)
+- .agents/docs/failure-modes.md (F08 dual write, F10 yolo merge)
+- scripts/delegate-codex.ps1 (L0 write-job.lock; -RepoRoot; no -Worktree yet)
+- scripts/check.ps1 (stale lock/lease detection; no L2 worktree.json yet)
+- scripts/verify-job.ps1 (-BaseRef, -JobId, -SkipLog, -RepoRoot)
+- scripts/lease-paths.ps1 (L1 only; L2 is separate)
+- .gitignore (has .agents/worktrees/; lacks *.worktree.json)
+
+## Design to review (summary of plans/006 fixed decisions)
+
+1. Lifecycle: scripts/worktree-job.ps1 -Action new|collect|cleanup -JobId <id>
+2. new: git worktree add .agents/worktrees/<JobId> -b wt/<JobId> <base> (base default=HEAD SHA); write .agents/locks/<JobId>.worktree.json (job_id/path/branch/base_sha/status); gitignore *.worktree.json
+3. L2 write jobs do NOT take main-tree write-job.lock; isolation is tree separation. worktree.json is the L2 lease; check.ps1 detects stale (dir missing or branch gone). Duplicate JobId worktree creation refused
+4. delegate-codex.ps1 -Worktree: call new, codex exec -C <worktree-path>, skip L0 lock for implement/fix only; read-only + -Worktree = no-op + warning
+5. collect: run verify-job.ps1 -JobId -BaseRef <base_sha> with logs resolved relative to worktree root for -Worktree jobs; print PASS/FAIL + git diff base..wt/<JobId> --stat; NEVER merge/rebase/cherry-pick; refuse if dirty worktree; print Operator next steps only
+6. cleanup: git worktree remove + status=removed; refuse dirty without -Force; do NOT delete branch wt/<JobId>
+7. isolation.md rewrite L2 from manual codex -C to this script flow
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES | DECLINE_AUTO_MERGE (if you demand auto-merge — Operator will reject that path)
+- Explicitly confirm: collect never mutates main HEAD / never merges (F10)
+- Explicitly confirm: -Worktree write jobs must not create main-tree write-job.lock (F08)
+- Flag any design hole that would force verbal/unenforceable isolation
+- List concrete design nits (schema fields, edge cases, test cases) with severity P0/P1/P2
+- If REQUEST_CHANGES: propose minimal text patches to plans/006 design section only (no code)
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks

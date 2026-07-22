@@ -145,14 +145,101 @@ if (Test-Path -LiteralPath $LockDir) {
   }
 }
 
-# 5. gitignore alignment
+# 5. L2 worktree metadata (active/collected): dir + branch + git worktree registration path match
+function Get-CheckRegisteredWorktreePath {
+  param(
+    [string] $ControlRoot,
+    [string] $Branch
+  )
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $porcelain = & git -C $ControlRoot worktree list --porcelain 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { return $null }
+  $text = ($porcelain | ForEach-Object { "$_" }) -join [Environment]::NewLine
+  $currentPath = $null
+  $currentBranch = $null
+  foreach ($line in ($text -split "`r?`n")) {
+    if ($line -match '^worktree (.+)$') {
+      if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
+      $currentPath = $Matches[1]
+      $currentBranch = $null
+    }
+    elseif ($line -match '^branch refs/heads/(.+)$') {
+      $currentBranch = $Matches[1]
+    }
+    elseif ($line -eq '') {
+      if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
+      $currentPath = $null
+      $currentBranch = $null
+    }
+  }
+  if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
+  return $null
+}
+
+if (Test-Path -LiteralPath $LockDir) {
+  foreach ($file in Get-ChildItem -LiteralPath $LockDir -Filter '*.worktree.json' -File -ErrorAction SilentlyContinue) {
+    try {
+      $wt = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+      $results.Add((Write-CheckResult WARN "worktree:$($file.Name)" "invalid JSON: $($_.Exception.Message)")) | Out-Null
+      continue
+    }
+    $status = [string]$wt.status
+    if ($status -ne 'active' -and $status -ne 'collected') { continue }
+    $jid = [string]$wt.job_id
+    $wtPath = [string]$wt.path
+    $branch = [string]$wt.branch
+    $detail = [System.Collections.Generic.List[string]]::new()
+    $dirOk = $wtPath -and (Test-Path -LiteralPath $wtPath)
+    if (-not $dirOk) { $detail.Add('directory missing') | Out-Null }
+    $branchOk = $false
+    if ($branch) {
+      & git -C $root show-ref --verify --quiet "refs/heads/$branch" 2>$null
+      $branchOk = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $branchOk) { $detail.Add('branch missing') | Out-Null }
+    $regPath = $null
+    if ($branchOk) {
+      $regPath = Get-CheckRegisteredWorktreePath -ControlRoot $root -Branch $branch
+    }
+    $regOk = $false
+    if ($regPath -and $dirOk) {
+      try {
+        $regOk = ((Resolve-Path -LiteralPath $regPath).Path -eq (Resolve-Path -LiteralPath $wtPath).Path)
+      }
+      catch {
+        $regOk = $false
+      }
+    }
+    if (-not $regOk) { $detail.Add('not registered as worktree or path mismatch') | Out-Null }
+    if ($dirOk -and $branchOk -and $regOk) {
+      $results.Add((Write-CheckResult OK "worktree:$jid" "status=$status dir+branch+registration OK")) | Out-Null
+      continue
+    }
+    $msg = ($detail -join '; ')
+    if ($Fix) {
+      $wt.status = 'stale'
+      $wt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $file.FullName -Encoding UTF8
+      $results.Add((Write-CheckResult WARN "worktree:$jid" "$msg; marked status=stale (-Fix)")) | Out-Null
+    }
+    else {
+      $results.Add((Write-CheckResult WARN "worktree:$jid" "$msg; re-run with -Fix to mark stale")) | Out-Null
+    }
+  }
+}
+
+# 6. gitignore alignment
 $gitignorePath = Join-Path $root '.gitignore'
 if (-not (Test-Path -LiteralPath $gitignorePath)) {
   $results.Add((Write-CheckResult WARN 'gitignore' '.gitignore missing')) | Out-Null
 }
 else {
   $gi = Get-Content -LiteralPath $gitignorePath -Raw -Encoding UTF8
-  $need = @('.agents/locks/*.lease.json', '.agents/logs/codex/*.last.txt')
+  $need = @('.agents/locks/*.lease.json', '.agents/locks/*.worktree.json', '.agents/logs/codex/*.last.txt')
   foreach ($pat in $need) {
     if ($gi -notlike "*$pat*") {
       $results.Add((Write-CheckResult WARN 'gitignore' "missing pattern: $pat")) | Out-Null

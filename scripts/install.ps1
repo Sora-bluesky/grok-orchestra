@@ -110,6 +110,7 @@ HANDOFF.md
 .agents/worktrees/
 .agents/locks/write-job.lock
 .agents/locks/*.lease.json
+.agents/locks/*.worktree.json
 .agents/locks/leases.json
 
 # Keep structure
@@ -295,6 +296,7 @@ $scriptFiles = @(
   'scripts\lease-paths.ps1',
   'scripts\check.ps1',
   'scripts\verify-job.ps1',
+  'scripts\worktree-job.ps1',
   'scripts\lib\path-normalize.ps1'
 )
 foreach ($rel in $scriptFiles) {
