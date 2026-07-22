@@ -487,11 +487,17 @@ function Invoke-Collect {
   if (-not $logRequired) { $verifyArgs['SkipLog'] = $true }
 
   Write-Host "worktree-job collect: running verify-job on worktree $wtPath (base=$baseSha)"
+  # Belt-and-suspenders: restore collect caller's cwd if verify-job ever leaks Set-Location
+  $collectPrevCwd = $null
+  try { $collectPrevCwd = (Get-Location).Path } catch { }
   $prevEap = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   $verifyOut = & $verifyScript @verifyArgs 2>&1
   $verifyCode = $LASTEXITCODE
   $ErrorActionPreference = $prevEap
+  if ($collectPrevCwd -and (Test-Path -LiteralPath $collectPrevCwd)) {
+    try { Set-Location -LiteralPath $collectPrevCwd } catch { }
+  }
   $verifyText = ($verifyOut | ForEach-Object { "$_" }) -join [Environment]::NewLine
   Write-Host $verifyText
 
@@ -598,7 +604,32 @@ function Invoke-Cleanup {
   else {
     # Directory already gone (external delete / stale). Prune dangling registration so
     # the retained branch is not left reported as checked-out/undeletable.
+    # Note: prune does NOT drop LOCKED registrations - refuse to mark removed if still listed.
     try { Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'prune') | Out-Null } catch { }
+
+    $stillListed = $false
+    $regByBranch = $null
+    try { $regByBranch = Get-RegisteredWorktreePath -ControlRoot $ControlRoot -Branch $branch } catch { }
+    if ($regByBranch) { $stillListed = $true }
+    if (-not $stillListed) {
+      try {
+        $porcelain = Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'list', '--porcelain')
+        $canonNorm = $canonical.TrimEnd('\', '/')
+        foreach ($line in ($porcelain -split "`r?`n")) {
+          if ($line -match '^worktree (.+)$') {
+            try {
+              $listed = [System.IO.Path]::GetFullPath($Matches[1]).TrimEnd('\', '/')
+              if ($listed -eq $canonNorm) { $stillListed = $true; break }
+            }
+            catch { }
+          }
+        }
+      }
+      catch { }
+    }
+    if ($stillListed) {
+      throw ("Worktree registration still present after prune (likely locked). Unlock or force-remove, then retry: git worktree unlock `"{0}`"  OR  git worktree remove --force `"{0}`"" -f $canonical)
+    }
   }
 
   $owned = @()

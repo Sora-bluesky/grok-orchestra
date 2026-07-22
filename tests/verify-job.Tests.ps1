@@ -39,6 +39,28 @@ Describe 'verify-job.ps1' {
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'verify-job: PASS'
   }
 
+  It 'restores caller PWD after PASS and FAIL' {
+    $caller = Join-Path $TestDrive ("caller-pwd-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $caller | Out-Null
+    Push-Location $caller
+    try {
+      $beforePass = (Get-Location).Path
+      & $script:VerifyScript -JobId 'pwd-pass' -SkipLog -RepoRoot $script:Repo *>$null
+      $LASTEXITCODE | Should -Be 0
+      (Get-Location).Path | Should -Be $beforePass
+
+      # Force FAIL via OwnedPaths escape
+      Set-Content -LiteralPath (Join-Path $script:Repo 'src\app.ps1') -Value '# changed' -Encoding UTF8
+      $beforeFail = (Get-Location).Path
+      & $script:VerifyScript -JobId 'pwd-fail' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('docs') *>$null
+      $LASTEXITCODE | Should -Be 1
+      (Get-Location).Path | Should -Be $beforeFail
+    }
+    finally {
+      Pop-Location
+    }
+  }
+
   It 'fails when changed path escapes OwnedPaths' {
     Set-Content -LiteralPath (Join-Path $script:Repo 'src\app.ps1') -Value '# app changed' -Encoding UTF8
     $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('docs') *>&1

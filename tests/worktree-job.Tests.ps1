@@ -360,6 +360,38 @@ Describe 'worktree-job.ps1' {
     $LASTEXITCODE | Should -Be 0
   }
 
+  It 'cleanup refuses locked missing worktree and does not mark removed' {
+    & $script:WtScript -Action new -JobId 'locked1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'locked1.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $wtPath = $meta.path
+    # Lock then externally delete dir - prune will not drop locked registration
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & git -C $script:Repo worktree lock $wtPath 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
+    Remove-Item -LiteralPath $wtPath -Recurse -Force
+    Clear-GitReadOnlyAttributes -Path $script:Repo
+
+    $err = $null
+    try {
+      & $script:WtScript -Action cleanup -JobId 'locked1' -RepoRoot $script:Repo -LockDir $script:LockDir -Force 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'locked|unlock|still present|registration'
+    $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaAfter.status | Should -Not -Be 'removed'
+    $metaAfter.status | Should -Be 'active'
+
+    # Teardown: unlock + force-remove registration so AfterEach can clean
+    $ErrorActionPreference = 'Continue'
+    & git -C $script:Repo worktree unlock $wtPath 2>&1 | Out-Null
+    & git -C $script:Repo worktree remove --force $wtPath 2>&1 | Out-Null
+    & git -C $script:Repo worktree prune 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
+  }
+
   It 'collect refuses detached HEAD in the worktree' {
     & $script:WtScript -Action new -JobId 'detach1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
     $meta = Get-Content -LiteralPath (Join-Path $script:LockDir 'detach1.worktree.json') -Raw -Encoding UTF8 | ConvertFrom-Json
