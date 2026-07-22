@@ -286,6 +286,80 @@ Describe 'worktree-job.ps1' {
     Test-Path -LiteralPath (Join-Path $script:LockDir 'roll1.worktree.json') | Should -BeFalse
   }
 
+  It 'collect leaves status active and prints no merge guidance when verify fails' {
+    & $script:WtScript -Action new -JobId 'vfail1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog -OwnedPaths @('src') | Out-Null
+    $metaPath = Join-Path $script:LockDir 'vfail1.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    # Commit a path outside OwnedPaths so verify-job fails scope check
+    New-Item -ItemType Directory -Force -Path (Join-Path $meta.path 'docs') | Out-Null
+    Set-Content -LiteralPath (Join-Path $meta.path 'docs\out.txt') -Value 'escape' -Encoding UTF8
+    git -C $meta.path add -A | Out-Null
+    git -C $meta.path commit -qm 'escape owned' | Out-Null
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    # Capture Information stream (Write-Host) where available; assert side effects either way
+    $out = & $script:WtScript -Action collect -JobId 'vfail1' -RepoRoot $script:Repo -LockDir $script:LockDir *>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    $text = ($out | ForEach-Object { "$_" }) -join "`n"
+    $code | Should -Not -Be 0
+    $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaAfter.status | Should -Be 'active'
+    $metaAfter.status | Should -Not -Be 'collected'
+    # If host stream was captured, merge guidance must be absent
+    if ($text.Length -gt 0) {
+      $text | Should -Not -Match 'git merge --no-ff'
+      $text | Should -Not -Match 'Operator next actions'
+    }
+  }
+
+  It 'collect refuses corrupted base_sha and does not write side files' {
+    & $script:WtScript -Action new -JobId 'badbase' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'badbase.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $meta.base_sha = '--output=/tmp/pwned'
+    $meta | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metaPath -Encoding UTF8
+    $probe = Join-Path $script:Repo 'pwned-must-not-exist.txt'
+    if (Test-Path -LiteralPath $probe) { Remove-Item -LiteralPath $probe -Force }
+
+    $err = $null
+    try {
+      & $script:WtScript -Action collect -JobId 'badbase' -RepoRoot $script:Repo -LockDir $script:LockDir 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'base_sha|Invalid'
+    Test-Path -LiteralPath $probe | Should -BeFalse
+    $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaAfter.status | Should -Be 'active'
+  }
+
+  It 'cleanup after external worktree dir delete prunes registration and marks removed' {
+    & $script:WtScript -Action new -JobId 'goneext' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'goneext.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $wtPath = $meta.path
+    Test-Path -LiteralPath $wtPath | Should -BeTrue
+    # External delete of worktree directory (leave registration dangling)
+    Remove-Item -LiteralPath $wtPath -Recurse -Force
+    Clear-GitReadOnlyAttributes -Path $script:Repo
+
+    & $script:WtScript -Action cleanup -JobId 'goneext' -RepoRoot $script:Repo -LockDir $script:LockDir -Force | Out-Null
+    $LASTEXITCODE | Should -Be 0
+    $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaAfter.status | Should -Be 'removed'
+    # Branch retained and not locked as checked-out in another worktree
+    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/goneext'
+    $LASTEXITCODE | Should -Be 0
+    $list = git -C $script:Repo worktree list --porcelain 2>$null
+    $listText = ($list | Out-String)
+    $listText | Should -Not -Match [regex]::Escape($wtPath)
+    # Branch is deletable (not "checked out" elsewhere)
+    git -C $script:Repo branch -D 'wt/goneext' 2>&1 | Out-Null
+    $LASTEXITCODE | Should -Be 0
+  }
+
   It 'collect refuses detached HEAD in the worktree' {
     & $script:WtScript -Action new -JobId 'detach1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
     $meta = Get-Content -LiteralPath (Join-Path $script:LockDir 'detach1.worktree.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -556,5 +630,57 @@ Test L2 skip lock.
     # fake codex wrote last log under worktree
     $log = Join-Path $m.path ".agents\logs\codex\l2job1.last.txt"
     Test-Path -LiteralPath $log | Should -BeTrue
+  }
+
+  It 'worktree record path with semicolon round-trips to correct exec dir' {
+    # NTFS allows ';' in directory names. Record parse must not truncate path.
+    $semiRoot = Join-Path $TestDrive ("semi;repo-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $semiRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $semiRoot 'scripts') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $semiRoot '.agents\docs\packets') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $semiRoot '.agents\locks') | Out-Null
+    git -C $semiRoot init -q | Out-Null
+    git -C $semiRoot config user.email 'test@example.com'
+    git -C $semiRoot config user.name 'Test'
+    Set-Content -LiteralPath (Join-Path $semiRoot 'README.md') -Value 'seed' -Encoding UTF8
+    git -C $semiRoot add -A | Out-Null
+    git -C $semiRoot commit -qm 'seed' | Out-Null
+    $prompt = Join-Path $semiRoot '.agents\docs\packets\t.prompt.txt'
+    @'
+## Objective
+semicolon path
+
+## Constraints
+- none
+
+## Relevant files
+- README.md
+
+## Acceptance checks
+- none
+
+## Output format
+## TL;DR
+'@ | Set-Content -LiteralPath $prompt -Encoding UTF8
+
+    try {
+      $err = $null
+      try {
+        & $script:DelegateScript -JobId 'semipath' -Type implement -PromptFile $prompt -RepoRoot $semiRoot -Worktree 2>&1 | Out-Null
+      }
+      catch { $err = $_ }
+      $err | Should -BeNullOrEmpty
+      $meta = Get-Content -LiteralPath (Join-Path $semiRoot '.agents\locks\semipath.worktree.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+      $expectedWt = [System.IO.Path]::GetFullPath((Join-Path $semiRoot '.agents\worktrees\semipath'))
+      $meta.path.TrimEnd('\', '/') | Should -Be $expectedWt.TrimEnd('\', '/')
+      $semiRoot | Should -Match ';'
+      $meta.path | Should -Match ';'
+      $log = Join-Path $meta.path '.agents\logs\codex\semipath.last.txt'
+      Test-Path -LiteralPath $log | Should -BeTrue
+      (Get-Content -LiteralPath $log -Raw) | Should -Match 'fake-codex'
+    }
+    finally {
+      Clear-TestDriveAfterGit -RepoRoot $semiRoot -DriveRoot $TestDrive
+    }
   }
 }

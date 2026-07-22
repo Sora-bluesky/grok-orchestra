@@ -116,9 +116,11 @@ if ($Worktree) {
     if ($LASTEXITCODE -ne 0) {
       Write-Error "worktree-job new failed for JobId=$JobId"
     }
+    # Record format: path=<path>;branch=<b>;base_sha=<sha>;status=<s>
+    # Path may contain ';' (legal on NTFS). Take everything before ';branch=' as path.
     $wtLine = ($wtOut | ForEach-Object { "$_" } | Where-Object { $_ -match '^path=' } | Select-Object -Last 1)
-    if (-not $wtLine -or $wtLine -notmatch 'path=([^;]+)') {
-      Write-Error "worktree-job new did not emit path=... line. Output: $wtOut"
+    if (-not $wtLine -or $wtLine -notmatch '^(?s)path=(.+);branch=([^;]+);base_sha=([0-9a-fA-F]+);status=(\w+)\s*$') {
+      Write-Error "worktree-job new did not emit path=...;branch=...;base_sha=...;status= line. Output: $wtOut"
     }
     $execRoot = $Matches[1]
     if (-not (Test-Path -LiteralPath $execRoot)) {

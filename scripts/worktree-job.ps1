@@ -464,6 +464,13 @@ function Invoke-Collect {
   }
 
   $baseSha = [string]$meta.base_sha
+  if ($baseSha -notmatch '^[0-9a-fA-F]{7,40}$') {
+    throw "Invalid base_sha in L2 metadata (must be 7-40 hex chars): '$baseSha'"
+  }
+  # Reject option-shaped / injection tokens even if they match hex length loosely
+  if ($baseSha.StartsWith('-')) {
+    throw "Invalid base_sha starts with '-': '$baseSha'"
+  }
   $branch = [string]$meta.branch
   $owned = @()
   if ($meta.owned_paths) { $owned = @($meta.owned_paths | ForEach-Object { [string]$_ }) }
@@ -488,24 +495,41 @@ function Invoke-Collect {
   $verifyText = ($verifyOut | ForEach-Object { "$_" }) -join [Environment]::NewLine
   Write-Host $verifyText
 
+  if ($verifyCode -ne 0) {
+    # Leave status active (or verify_failed) - never mark collected or print merge guidance
+    $failUpdated = @{
+      schema_version = [int]$meta.schema_version
+      job_id         = [string]$meta.job_id
+      path           = [string]$meta.path
+      branch         = [string]$meta.branch
+      base_sha       = $baseSha
+      status         = 'active'
+      owned_paths    = $owned
+      log_required   = $logRequired
+      created_at     = [string]$meta.created_at
+      updated_at     = (Get-Date -Format o)
+    }
+    Write-Meta -Path $metaPath -Meta $failUpdated
+    Write-Host 'worktree-job collect: VERIFY FAIL (main HEAD unchanged; no merge performed; status left active)'
+    exit 1
+  }
+
   $diffText = Get-Git -WorkDir $ControlRoot -GitArgs @('diff', "$baseSha..$branch", '--stat')
   Write-Host "--- git diff $baseSha..$branch --stat ---"
   Write-Host $diffText
 
-  $meta.status = 'collected'
-  $meta.updated_at = Get-Date -Format o
-  # ConvertFrom-Json object -> rewrite via hashtable-like properties
+  $updatedAt = Get-Date -Format o
   $updated = @{
     schema_version = [int]$meta.schema_version
     job_id         = [string]$meta.job_id
     path           = [string]$meta.path
     branch         = [string]$meta.branch
-    base_sha       = [string]$meta.base_sha
+    base_sha       = $baseSha
     status         = 'collected'
     owned_paths    = $owned
     log_required   = $logRequired
     created_at     = [string]$meta.created_at
-    updated_at     = [string]$meta.updated_at
+    updated_at     = $updatedAt
   }
   Write-Meta -Path $metaPath -Meta $updated
 
@@ -514,11 +538,6 @@ function Invoke-Collect {
   Write-Host ("  git merge --no-ff {0}" -f $branch)
   Write-Host ("  # or open a PR from {0}" -f $branch)
   Write-Host ("  # then: worktree-job.ps1 -Action cleanup -JobId {0}" -f $Id)
-
-  if ($verifyCode -ne 0) {
-    Write-Host 'worktree-job collect: VERIFY FAIL (main HEAD unchanged; no merge performed)'
-    exit 1
-  }
   Write-Host 'worktree-job collect: VERIFY PASS (main HEAD unchanged; no merge performed)'
   exit 0
 }
@@ -576,7 +595,11 @@ function Invoke-Cleanup {
       }
     }
   }
-  # else: directory already gone; metadata still marked removed below (path was canonical)
+  else {
+    # Directory already gone (external delete / stale). Prune dangling registration so
+    # the retained branch is not left reported as checked-out/undeletable.
+    try { Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'prune') | Out-Null } catch { }
+  }
 
   $owned = @()
   if ($meta.owned_paths) { $owned = @($meta.owned_paths | ForEach-Object { [string]$_ }) }

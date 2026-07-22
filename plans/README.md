@@ -90,6 +90,12 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 |--------|----------|--------|-------|
 | concurrent main-tree + L2 disjoint-write defense-in-depth test | P3 | deferred | Covered by design (L2 skips L0/L1; tree separation). Full concurrent stress test deferred post-006. |
 
+## Follow-up / deferred (PR #18 Codex review)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| `install.ps1` managed gitignore block not upgraded on re-install (missing `*.worktree.json` on upgraded targets) | P2 | deferred | Installer upgrade-migration semantics (plan 003 territory). Recorded from PR #18 bot review round 1. |
+
 ## Dependency notes
 
 - 002 は 001 に依存: スクリプト変更(delegate-codex.ps1 への PID 記録追加等)を
