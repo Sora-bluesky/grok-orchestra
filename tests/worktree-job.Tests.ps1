@@ -176,12 +176,112 @@ Describe 'worktree-job.ps1' {
     $err | Should -Not -BeNullOrEmpty
     "$err" | Should -Match 'canonical L2 path|path mismatch|does not match'
   }
+
+  It 'cleanup -Force refuses tampered meta.path (repo root, sibling, .. escape) with zero deletion' {
+    & $script:WtScript -Action new -JobId 'clntamp' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'clntamp.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $realWt = $meta.path
+    Test-Path -LiteralPath $realWt | Should -BeTrue
+    Test-Path -LiteralPath (Join-Path $script:Repo 'src\app.ps1') | Should -BeTrue
+
+    $sibling = Join-Path $TestDrive ("sibling-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $sibling | Out-Null
+    Set-Content -LiteralPath (Join-Path $sibling 'keep.txt') -Value 'alive' -Encoding UTF8
+
+    $escapePath = Join-Path $realWt '..\..\src'
+    $cases = @(
+      @{ Label = 'repo-root'; Path = $script:Repo },
+      @{ Label = 'sibling'; Path = $sibling },
+      @{ Label = 'dotdot-escape'; Path = $escapePath }
+    )
+
+    foreach ($c in $cases) {
+      $m = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      $m.path = $c.Path
+      $m | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metaPath -Encoding UTF8
+
+      $err = $null
+      try {
+        & $script:WtScript -Action cleanup -JobId 'clntamp' -RepoRoot $script:Repo -LockDir $script:LockDir -Force 2>&1 | Out-Null
+      }
+      catch { $err = $_ }
+      $err | Should -Not -BeNullOrEmpty -Because "cleanup must refuse $($c.Label)"
+      "$err" | Should -Match 'canonical L2 path|outside|Refusing|does not match'
+
+      # Zero deletion of tampered targets and of the real worktree / main tree
+      Test-Path -LiteralPath $script:Repo | Should -BeTrue
+      Test-Path -LiteralPath (Join-Path $script:Repo 'src\app.ps1') | Should -BeTrue
+      Test-Path -LiteralPath $realWt | Should -BeTrue
+      Test-Path -LiteralPath (Join-Path $sibling 'keep.txt') | Should -BeTrue
+    }
+
+    # Restore path and prove normal cleanup still works
+    $m2 = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $m2.path = $realWt
+    $m2 | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metaPath -Encoding UTF8
+    & $script:WtScript -Action cleanup -JobId 'clntamp' -RepoRoot $script:Repo -LockDir $script:LockDir -Force | Out-Null
+    $LASTEXITCODE | Should -Be 0
+  }
+
+  It 'new refuses JobId reuse when wt/<Id> branch exists without metadata' {
+    $sha = (git -C $script:Repo rev-parse HEAD).Trim()
+    git -C $script:Repo branch 'wt/reuse1' $sha | Out-Null
+    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/reuse1'
+    $LASTEXITCODE | Should -Be 0
+    Test-Path -LiteralPath (Join-Path $script:LockDir 'reuse1.worktree.json') | Should -BeFalse
+
+    $err = $null
+    try {
+      & $script:WtScript -Action new -JobId 'reuse1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'still exists'
+  }
+
+  It 'new rolls back orphan branch residue when worktree add fails after -b' {
+    # Block path with a file so git worktree add may create branch then fail on populate,
+    # or fail early — either way branch must not remain after the failed new.
+    $blockParent = Join-Path $script:Repo '.agents\worktrees'
+    New-Item -ItemType Directory -Force -Path $blockParent | Out-Null
+    $blockPath = Join-Path $blockParent 'roll1'
+    Set-Content -LiteralPath $blockPath -Value 'not-a-dir' -Encoding UTF8
+
+    $err = $null
+    try {
+      & $script:WtScript -Action new -JobId 'roll1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+
+    git -C $script:Repo show-ref --verify --quiet 'refs/heads/wt/roll1'
+    $LASTEXITCODE | Should -Not -Be 0
+    Test-Path -LiteralPath (Join-Path $script:LockDir 'roll1.worktree.json') | Should -BeFalse
+  }
+
+  It 'collect refuses detached HEAD in the worktree' {
+    & $script:WtScript -Action new -JobId 'detach1' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $meta = Get-Content -LiteralPath (Join-Path $script:LockDir 'detach1.worktree.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    # Detach HEAD at current commit
+    $head = (git -C $meta.path rev-parse HEAD).Trim()
+    git -C $meta.path checkout --detach $head 2>$null | Out-Null
+
+    $err = $null
+    try {
+      & $script:WtScript -Action collect -JobId 'detach1' -RepoRoot $script:Repo -LockDir $script:LockDir 2>&1 | Out-Null
+    }
+    catch { $err = $_ }
+    $err | Should -Not -BeNullOrEmpty
+    "$err" | Should -Match 'Detached|expected branch|symbolic-ref|not on expected'
+  }
 }
 
 Describe 'check.ps1 L2 worktree stale detection' {
   BeforeAll {
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:CheckScript = Join-Path $script:OrchestraRoot 'scripts\check.ps1'
+    $script:WtScript = Join-Path $script:OrchestraRoot 'scripts\worktree-job.ps1'
   }
 
   BeforeEach {
@@ -213,6 +313,68 @@ Describe 'check.ps1 L2 worktree stale detection' {
     ($output2 | ForEach-Object { "$_" } | Out-String) | Should -Match 'status=stale'
     $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $meta.status | Should -Be 'stale'
+  }
+
+  It 'live worktree reports OK with -Fix and does not rewrite status to stale' {
+    $repo = Join-Path $TestDrive ("live-repo-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $repo | Out-Null
+    git -C $repo init -q | Out-Null
+    git -C $repo config user.email 'test@example.com'
+    git -C $repo config user.name 'Test'
+    # Minimal SSOT so check.ps1 does not FAIL on layout (only L2 line is under test)
+    @(
+      'AGENTS.md',
+      '.agents\INDEX.md',
+      '.agents\docs\failure-modes.md',
+      'scripts\delegate-codex.ps1',
+      'scripts\lease-paths.ps1',
+      '.gitignore'
+    ) | ForEach-Object {
+      $p = Join-Path $repo $_
+      New-Item -ItemType Directory -Force -Path (Split-Path $p -Parent) | Out-Null
+      Set-Content -LiteralPath $p -Value 'stub' -Encoding UTF8
+    }
+    # gitignore patterns required by check.ps1
+    @(
+      '.agents/locks/*.lease.json',
+      '.agents/locks/*.worktree.json',
+      '.agents/logs/codex/*.last.txt'
+    ) | Set-Content -LiteralPath (Join-Path $repo '.gitignore') -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $repo 'f.txt') -Value 'x' -Encoding UTF8
+    git -C $repo add -A | Out-Null
+    git -C $repo commit -qm 'seed' | Out-Null
+    $lockDir = Join-Path $repo '.agents\locks'
+    New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
+
+    try {
+      & $script:WtScript -Action new -JobId 'liveok' -RepoRoot $repo -LockDir $lockDir -SkipLog | Out-Null
+      $metaPath = Join-Path $lockDir 'liveok.worktree.json'
+      $metaBefore = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      $metaBefore.status | Should -Be 'active'
+
+      $output = & $script:CheckScript -LockDir $lockDir -RepoRoot $repo -SkipToolCheck -Fix *>&1
+      $code = $LASTEXITCODE
+      $text = ($output | ForEach-Object { "$_" } | Out-String)
+      $code | Should -Be 0 -Because $text
+      $text | Should -Match 'worktree:liveok'
+      $text | Should -Match 'dir\+branch\+registration OK'
+      $text | Should -Not -Match 'marked status=stale'
+
+      $metaAfter = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      $metaAfter.status | Should -Be 'active'
+    }
+    finally {
+      try {
+        $list = git -C $repo worktree list --porcelain 2>$null
+        foreach ($line in ($list -split "`r?`n")) {
+          if ($line -match '^worktree (.+)$') {
+            $p = $Matches[1]
+            if ($p -ne $repo) { git -C $repo worktree remove --force $p 2>$null | Out-Null }
+          }
+        }
+      }
+      catch { }
+    }
   }
 }
 

@@ -190,7 +190,40 @@ function Test-WorktreeDirty {
   return -not [string]::IsNullOrWhiteSpace($status)
 }
 
-function Assert-WorktreeIdentity {
+function Get-CanonicalWorktreePath {
+  param(
+    [string] $ControlRoot,
+    [string] $JobId
+  )
+  return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $ControlRoot '.agents\worktrees') $JobId))
+}
+
+function Test-IsCanonicalL2Path {
+  <#
+    True only when Candidate equals the canonical L2 worktree directory for JobId
+    (or is a path strictly under it). Control root and any path outside L2 → false.
+  #>
+  param(
+    [string] $Candidate,
+    [string] $ControlRoot,
+    [string] $JobId
+  )
+  if ([string]::IsNullOrWhiteSpace($Candidate)) { return $false }
+  try {
+    $cand = [System.IO.Path]::GetFullPath($Candidate).TrimEnd('\', '/')
+    $canon = (Get-CanonicalWorktreePath -ControlRoot $ControlRoot -JobId $JobId).TrimEnd('\', '/')
+    $control = [System.IO.Path]::GetFullPath($ControlRoot).TrimEnd('\', '/')
+    if ($cand -eq $control) { return $false }
+    if ($cand -eq $canon) { return $true }
+    $prefix = $canon + [System.IO.Path]::DirectorySeparatorChar
+    return $cand.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+  }
+  catch {
+    return $false
+  }
+}
+
+function Assert-MetaCanonicalFields {
   param(
     [string] $ControlRoot,
     [object] $Meta,
@@ -205,19 +238,60 @@ function Assert-WorktreeIdentity {
   if ($branch -cne $expectedBranch) {
     throw "Metadata branch '$branch' does not match expected '$expectedBranch'."
   }
-  $expectedPath = Join-Path (Join-Path $ControlRoot '.agents\worktrees') $ExpectedJobId
+  $metaPathRaw = [string]$Meta.path
+  if ([string]::IsNullOrWhiteSpace($metaPathRaw)) {
+    throw "Metadata path is empty for JobId='$ExpectedJobId'."
+  }
+  $expectedFull = Get-CanonicalWorktreePath -ControlRoot $ControlRoot -JobId $ExpectedJobId
+  try {
+    $metaFull = [System.IO.Path]::GetFullPath($metaPathRaw)
+  }
+  catch {
+    throw "Metadata path is not a valid path: '$metaPathRaw'"
+  }
+  if ($metaFull.TrimEnd('\', '/') -ne $expectedFull.TrimEnd('\', '/')) {
+    throw "Metadata path is not the canonical L2 path. metadata=$metaFull expected=$expectedFull"
+  }
+  return $expectedFull
+}
+
+function Assert-WorktreeIdentity {
+  param(
+    [string] $ControlRoot,
+    [object] $Meta,
+    [string] $ExpectedJobId
+  )
+  $expectedFull = Assert-MetaCanonicalFields -ControlRoot $ControlRoot -Meta $Meta -ExpectedJobId $ExpectedJobId
   $metaPath = [string]$Meta.path
   if (-not (Test-Path -LiteralPath $metaPath)) {
     throw "Worktree directory missing: $metaPath"
   }
-  if (-not (Test-Path -LiteralPath $expectedPath)) {
-    throw "Expected worktree path missing: $expectedPath"
+  if (-not (Test-Path -LiteralPath $expectedFull)) {
+    throw "Expected worktree path missing: $expectedFull"
   }
   $resolvedMeta = (Resolve-Path -LiteralPath $metaPath).Path
-  $resolvedExpected = (Resolve-Path -LiteralPath $expectedPath).Path
+  $resolvedExpected = (Resolve-Path -LiteralPath $expectedFull).Path
   if ($resolvedMeta -ne $resolvedExpected) {
     throw "Metadata path is not the canonical L2 path. metadata=$resolvedMeta expected=$resolvedExpected"
   }
+  $branch = [string]$Meta.branch
+  $expectedRef = "refs/heads/$branch"
+
+  # HEAD first: detached / wrong-branch must fail closed with a clear message
+  # (detached worktrees omit "branch refs/heads/..." in `git worktree list`).
+  $prevSym = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $symOut = & git -C $resolvedMeta symbolic-ref -q HEAD 2>&1
+  $symCode = $LASTEXITCODE
+  $ErrorActionPreference = $prevSym
+  if ($symCode -ne 0) {
+    throw "Worktree HEAD is detached or has no symbolic-ref (expected $expectedRef)."
+  }
+  $headSym = ("$symOut").Trim()
+  if ($headSym -ne $expectedRef) {
+    throw "Worktree HEAD is not on expected branch (got '$headSym', expected '$expectedRef'). Detached or wrong branch."
+  }
+
   $registered = Get-RegisteredWorktreePath -ControlRoot $ControlRoot -Branch $branch
   if (-not $registered) {
     throw "Branch '$branch' is not registered as a git worktree."
@@ -225,11 +299,6 @@ function Assert-WorktreeIdentity {
   $resolvedReg = (Resolve-Path -LiteralPath $registered).Path
   if ($resolvedReg -ne $resolvedMeta) {
     throw "Worktree path mismatch. metadata=$resolvedMeta registered=$resolvedReg"
-  }
-  $headSym = (Get-Git -WorkDir $resolvedMeta -GitArgs @('symbolic-ref', '-q', 'HEAD')).Trim()
-  $expectedRef = "refs/heads/$branch"
-  if ($headSym -ne $expectedRef) {
-    throw "Worktree HEAD is not on expected branch (got '$headSym', expected '$expectedRef'). Detached or wrong branch."
   }
   return $resolvedMeta
 }
@@ -277,10 +346,8 @@ function Invoke-New {
     throw "Worktree directory already exists: $wtPath"
   }
 
-  $createdWorktree = $false
   try {
     Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'add', '-b', $branch, $wtPath, $baseSha) | Out-Null
-    $createdWorktree = $true
     $resolvedPath = (Resolve-Path -LiteralPath $wtPath).Path
     $now = Get-Date -Format o
     $meta = @{
@@ -300,10 +367,20 @@ function Invoke-New {
     Write-Output ("path={0};branch={1};base_sha={2};status=active" -f $resolvedPath, $branch, $baseSha)
   }
   catch {
-    if ($createdWorktree -and (Test-Path -LiteralPath $wtPath)) {
+    # Best-effort rollback even when worktree add created the branch but failed before
+    # $createdWorktree would have been set (Windows path/populate failure leaves orphan wt/<Id>).
+    if (Test-Path -LiteralPath $wtPath) {
       try { & git -C $ControlRoot worktree remove --force $wtPath 2>$null | Out-Null } catch { }
-      try { & git -C $ControlRoot branch -D $branch 2>$null | Out-Null } catch { }
+      if (Test-Path -LiteralPath $wtPath) {
+        # Only delete the canonical L2 path — never escalate outside the subtree (F10).
+        if (Test-IsCanonicalL2Path -Candidate $wtPath -ControlRoot $ControlRoot -JobId $Id) {
+          Remove-Item -LiteralPath $wtPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+      }
+      try { & git -C $ControlRoot worktree prune 2>$null | Out-Null } catch { }
     }
+    # Always attempt branch delete (covers add-failed-after-branch-create residue)
+    try { & git -C $ControlRoot branch -D $branch 2>$null | Out-Null } catch { }
     if (Test-Path -LiteralPath $metaPath) {
       Remove-Item -LiteralPath $metaPath -Force -ErrorAction SilentlyContinue
     }
@@ -401,17 +478,23 @@ function Invoke-Cleanup {
   Assert-SafeJobId -Id $Id
   $metaPath = Get-MetaPath -Locks $Locks -Id $Id
   $meta = Read-Meta -Path $metaPath
-  $wtPath = [string]$meta.path
   $branch = [string]$meta.branch
 
-  if (Test-Path -LiteralPath $wtPath) {
-    $resolved = (Resolve-Path -LiteralPath $wtPath).Path
+  # F10: never trust meta.path for deletion without identity. Tampered path
+  # (control root, sibling, .. escape) must refuse with zero filesystem damage.
+  $canonical = Assert-MetaCanonicalFields -ControlRoot $ControlRoot -Meta $meta -ExpectedJobId $Id
+
+  if (Test-Path -LiteralPath $canonical) {
+    # Live worktree: full registration + HEAD identity (same gate as collect)
+    $resolved = Assert-WorktreeIdentity -ControlRoot $ControlRoot -Meta $meta -ExpectedJobId $Id
+    if (-not (Test-IsCanonicalL2Path -Candidate $resolved -ControlRoot $ControlRoot -JobId $Id)) {
+      throw "Refusing cleanup: resolved path is outside canonical L2 subtree: $resolved"
+    }
     if (Test-WorktreeDirty -WorktreePath $resolved) {
       if (-not $ForceRemove) {
         throw "Worktree is dirty. Re-run with -Force to remove, or commit/discard changes first: $resolved"
       }
     }
-    # Prefer registered path; fall back to force remove by path
     try {
       if ($ForceRemove) {
         Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'remove', '--force', $resolved) | Out-Null
@@ -422,7 +505,13 @@ function Invoke-Cleanup {
     }
     catch {
       if ($ForceRemove) {
-        # Last resort for tests / half-registered trees
+        # Last resort: only Remove-Item the canonical L2 worktree path — never control root
+        if (-not (Test-IsCanonicalL2Path -Candidate $resolved -ControlRoot $ControlRoot -JobId $Id)) {
+          throw "Refusing last-resort Remove-Item outside L2 subtree: $resolved"
+        }
+        if ($resolved.TrimEnd('\', '/') -eq ([System.IO.Path]::GetFullPath($ControlRoot).TrimEnd('\', '/'))) {
+          throw "Refusing last-resort Remove-Item of control root: $resolved"
+        }
         Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction SilentlyContinue
         try { Get-Git -WorkDir $ControlRoot -GitArgs @('worktree', 'prune') | Out-Null } catch { }
       }
@@ -431,6 +520,7 @@ function Invoke-Cleanup {
       }
     }
   }
+  # else: directory already gone; metadata still marked removed below (path was canonical)
 
   $owned = @()
   if ($meta.owned_paths) { $owned = @($meta.owned_paths | ForEach-Object { [string]$_ }) }
@@ -439,7 +529,7 @@ function Invoke-Cleanup {
   $updated = @{
     schema_version = [int]$meta.schema_version
     job_id         = [string]$meta.job_id
-    path           = [string]$meta.path
+    path           = $canonical
     branch         = $branch
     base_sha       = [string]$meta.base_sha
     status         = 'removed'

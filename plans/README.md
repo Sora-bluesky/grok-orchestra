@@ -84,6 +84,12 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 |--------|----------|--------|-------|
 | `install.ps1` `Resolve-ComparablePath`: fail closed when the junction chain exceeds the 16-hop cap (currently returns the partially resolved path) | P2 | deferred | Deferred from PR #17 review (round budget exhausted). Replied-to on the PR but not previously recorded here. |
 
+## Follow-up / deferred (plan 006 adversarial verify)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| concurrent main-tree + L2 disjoint-write defense-in-depth test | P3 | deferred | Covered by design (L2 skips L0/L1; tree separation). Full concurrent stress test deferred post-006. |
+
 ## Dependency notes
 
 - 002 は 001 に依存: スクリプト変更(delegate-codex.ps1 への PID 記録追加等)を

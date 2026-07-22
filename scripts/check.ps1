@@ -146,6 +146,7 @@ if (Test-Path -LiteralPath $LockDir) {
 }
 
 # 5. L2 worktree metadata (active/collected): dir + branch + git worktree registration path match
+# Returns hashtable: Path (string|null), ProbeFailed (bool), ProbeMessage (string)
 function Get-CheckRegisteredWorktreePath {
   param(
     [string] $ControlRoot,
@@ -156,13 +157,21 @@ function Get-CheckRegisteredWorktreePath {
   $porcelain = & git -C $ControlRoot worktree list --porcelain 2>&1
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
-  if ($code -ne 0) { return $null }
   $text = ($porcelain | ForEach-Object { "$_" }) -join [Environment]::NewLine
+  if ($code -ne 0) {
+    return @{
+      Path         = $null
+      ProbeFailed  = $true
+      ProbeMessage = ("git worktree list failed (exit {0}): {1}" -f $code, $text)
+    }
+  }
   $currentPath = $null
   $currentBranch = $null
   foreach ($line in ($text -split "`r?`n")) {
     if ($line -match '^worktree (.+)$') {
-      if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
+      if ($currentPath -and $currentBranch -eq $Branch) {
+        return @{ Path = $currentPath; ProbeFailed = $false; ProbeMessage = '' }
+      }
       $currentPath = $Matches[1]
       $currentBranch = $null
     }
@@ -170,13 +179,17 @@ function Get-CheckRegisteredWorktreePath {
       $currentBranch = $Matches[1]
     }
     elseif ($line -eq '') {
-      if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
+      if ($currentPath -and $currentBranch -eq $Branch) {
+        return @{ Path = $currentPath; ProbeFailed = $false; ProbeMessage = '' }
+      }
       $currentPath = $null
       $currentBranch = $null
     }
   }
-  if ($currentPath -and $currentBranch -eq $Branch) { return $currentPath }
-  return $null
+  if ($currentPath -and $currentBranch -eq $Branch) {
+    return @{ Path = $currentPath; ProbeFailed = $false; ProbeMessage = '' }
+  }
+  return @{ Path = $null; ProbeFailed = $false; ProbeMessage = '' }
 }
 
 if (Test-Path -LiteralPath $LockDir) {
@@ -196,15 +209,42 @@ if (Test-Path -LiteralPath $LockDir) {
     $detail = [System.Collections.Generic.List[string]]::new()
     $dirOk = $wtPath -and (Test-Path -LiteralPath $wtPath)
     if (-not $dirOk) { $detail.Add('directory missing') | Out-Null }
+
+    # Branch probe: distinguish "missing" (exit 1) from git failure (other errors)
     $branchOk = $false
+    $branchProbeFailed = $false
     if ($branch) {
-      & git -C $root show-ref --verify --quiet "refs/heads/$branch" 2>$null
-      $branchOk = ($LASTEXITCODE -eq 0)
+      $prevBr = $ErrorActionPreference
+      $ErrorActionPreference = 'Continue'
+      $brOut = & git -C $root show-ref --verify --quiet "refs/heads/$branch" 2>&1
+      $brCode = $LASTEXITCODE
+      $ErrorActionPreference = $prevBr
+      if ($brCode -eq 0) {
+        $branchOk = $true
+      }
+      elseif ($brCode -eq 1) {
+        $detail.Add('branch missing') | Out-Null
+      }
+      else {
+        $branchProbeFailed = $true
+        $detail.Add(("git show-ref probe failed (exit {0})" -f $brCode)) | Out-Null
+      }
     }
-    if (-not $branchOk) { $detail.Add('branch missing') | Out-Null }
+    else {
+      $detail.Add('branch missing') | Out-Null
+    }
+
     $regPath = $null
+    $regProbeFailed = $false
     if ($branchOk) {
-      $regPath = Get-CheckRegisteredWorktreePath -ControlRoot $root -Branch $branch
+      $regInfo = Get-CheckRegisteredWorktreePath -ControlRoot $root -Branch $branch
+      if ($regInfo.ProbeFailed) {
+        $regProbeFailed = $true
+        $detail.Add($regInfo.ProbeMessage) | Out-Null
+      }
+      else {
+        $regPath = $regInfo.Path
+      }
     }
     $regOk = $false
     if ($regPath -and $dirOk) {
@@ -215,12 +255,21 @@ if (Test-Path -LiteralPath $LockDir) {
         $regOk = $false
       }
     }
-    if (-not $regOk) { $detail.Add('not registered as worktree or path mismatch') | Out-Null }
+    if (-not $regOk -and -not $regProbeFailed -and $branchOk) {
+      $detail.Add('not registered as worktree or path mismatch') | Out-Null
+    }
+
+    $gitProbeFailed = $branchProbeFailed -or $regProbeFailed
     if ($dirOk -and $branchOk -and $regOk) {
       $results.Add((Write-CheckResult OK "worktree:$jid" "status=$status dir+branch+registration OK")) | Out-Null
       continue
     }
     $msg = ($detail -join '; ')
+    # Do not destructively rewrite metadata when a git probe itself failed
+    if ($gitProbeFailed) {
+      $results.Add((Write-CheckResult WARN "worktree:$jid" "$msg; git probe failed — not marking stale")) | Out-Null
+      continue
+    }
     if ($Fix) {
       $wt.status = 'stale'
       $wt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $file.FullName -Encoding UTF8
