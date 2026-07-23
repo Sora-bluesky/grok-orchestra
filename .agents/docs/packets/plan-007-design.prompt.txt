@@ -1,0 +1,116 @@
+## Objective
+Design a worker-adapter layer decision for grok-orchestra: whether `delegate-worker.ps1 -Runtime <name>` is worth building in v0.4, which ≤2 runtimes to support, and what the PowerShell adapter contract must be — using empirical sandbox probes (not theory).
+
+## Constraints
+- READ-ONLY design only. Do not edit any files. Do not propose product code patches in this job.
+- Treat OS/app-level write blocks as PASS; prompt-only "please be read-only" as FAIL (F14 role-play).
+- A runtime whose advertised "read-only" is not actually enforced on this host is unsupported or limited — never first-class.
+- Max v0.4 scope if go: ≤2 runtimes total (including Codex if kept).
+- Forbidden: danger-full-access / --dangerously-* flags; inventing CLI flags not in evidence; claiming unmeasured platforms work.
+- Host under test: Windows 11; probe date 2026-07-23; temp base `C:\Users\sorab\AppData\Local\Temp\grok-orch-007-b3c74558`.
+
+## Relevant files
+- `plans/007-worker-adapter-spike.md` (full plan)
+- `scripts/delegate-codex.ps1` (baseline Codex impl to map onto adapter contract)
+- `AGENTS.md` (routing + F14 implications)
+- `.agents/docs/packets/plan-007-empirical.md` (Operator empirical table)
+- `plans/README.md` (rejected findings / go-no-go recording target)
+
+## Empirical data (Operator-measured; primary evidence)
+
+### Versions
+| CLI | Version | Installed |
+|-----|---------|-----------|
+| codex | codex-cli 0.145.0 (PATH); with helper PATH → 0.145.0-alpha.30 from versioned OpenAI dir | yes |
+| grok | 0.2.111 (94172f2aa4) stable | yes |
+| agy (Gemini Antigravity wrapper) | 1.1.5 | yes |
+| claude (Claude Code) | 2.1.218 | yes |
+| gemini (standalone) | — | NO — 未実測・文書ベース if discussed |
+
+### Write-enforcement probes (create marker file under disposable cwd)
+
+| Runtime | Mode under test | Marker created? | Enforced? | Evidence |
+|---------|-----------------|-----------------|-----------|----------|
+| codex | `exec -s read-only` WITHOUT sandbox helper on PATH | NO | YES (fail-closed shell) | `codex-windows-sandbox-setup.exe` program not found → shell errors; model WRITE_BLOCKED |
+| codex | `exec -s read-only` WITH helper on PATH | NO | YES (sandbox reject) | `writing is blocked by read-only sandbox; rejected by user approval settings` |
+| grok | `--sandbox read-only` | YES (PROBE_OK) | **NO on Windows** | Wrote CWD file; official grok docs Platform Support: Linux Landlock / macOS Seatbelt only; unsupported kernel → warn + continue without enforcement |
+| grok | `--disallowed-tools search_replace,run_terminal_cmd,run_terminal_command` | YES | NO (incomplete) | Still wrote (likely other write tool names remain) |
+| grok | `--tools read_file,grep,list_dir` | NO | YES (app tool allowlist) | WRITE_BLOCKED |
+| grok | `--deny Write(**) --deny Edit(**) --deny Bash(**)` | NO | YES (permission rules) | WRITE_BLOCKED |
+| claude | `--permission-mode plan --disallowedTools Edit,Write,NotebookEdit` | NO | YES | WRITE_BLOCKED; plan mode forbids non-RO |
+| claude | `--tools Read,Grep,Glob,LS` | NO | YES | WRITE_BLOCKED |
+| agy | `--sandbox --mode plan` | YES | **NO** | PROBE_OK despite flags; headless auto-denied some tools but write succeeded |
+| agy | `--mode plan` alone | YES | **NO** | PROBE_OK |
+| agy | `--sandbox` alone | YES | **NO** | PROBE_OK |
+
+### Headless / I/O surface (help + probes)
+
+| Runtime | Headless | Prompt in | Cwd | Result capture | Exit semantics (sample) |
+|---------|----------|-----------|-----|----------------|-------------------------|
+| codex | `codex exec` | stdin or arg | `-C DIR` | `-o last-message-file` + stdout combined | bad flag → exit 2; sandbox block still process exit 0 with WRITE_BLOCKED text |
+| grok | `-p` / `--prompt-file` / `--prompt-json` | flags (not stdin primary) | `--cwd` | stdout (`plain`/`json`/`streaming-json`) | invalid `--sandbox` profile still ran prompt (exit 0) — soft |
+| claude | `-p/--print` | arg or stdin | process cwd (`Set-Location` before invoke) | stdout text/json/stream-json | invalid permission-mode → exit 1 |
+| agy | `-p/--print` | flag | process cwd | stdout; often empty with jetski permission message | exit 0 even when tools denied / write succeeded |
+
+### Grok OS sandbox docs (local `~/.grok/docs/user-guide/18-sandbox.md`)
+- Profiles: `off`, `workspace`, `devbox`, `read-only`, `strict`
+- Mechanism: Landlock (Linux) / Seatbelt (macOS) — **Windows not listed**
+- Fail-open if sandbox cannot apply (except custom profile with deny)
+
+### Current Codex adapter surface (`scripts/delegate-codex.ps1`)
+Ops already present:
+1. **resolve invocation** — `Resolve-CodexNodeInvocation` (prefer node+codex.js else `codex`)
+2. **map sandbox** — write types → `workspace-write`; else `read-only`
+3. **pass prompt** — pipe Prompt Contract text on stdin to `codex exec`
+4. **capture result** — `.agents/logs/codex/<id>.{last,stderr,combined}.txt` via `-o` + stream capture
+5. **classify exit** — nonzero `$LASTEXITCODE` → Write-Error; empty last message → error
+
+Plus harness concerns outside pure runtime adapter: L0 write lock, L1 leases, L2 worktree, Prompt Contract headings check.
+
+## Analysis tasks (answer all)
+
+### (a) Adapter contract
+Define a PowerShell-facing contract for `delegate-worker.ps1 -Runtime <name>` with the 5 ops:
+- resolve invocation
+- map sandbox (logical RO vs workspace-write → runtime flags)
+- pass prompt
+- capture result (log path conventions)
+- classify exit
+
+State whether `delegate-codex.ps1`'s Codex implementation loads cleanly onto that contract (what splits into shared harness vs runtime adapter; L0/L1/L2 ownership).
+
+### (b) Guarantees-broken list
+For each runtime, classify:
+- **PASS-first-class**: RO truly enforced for harness design/review/investigate
+- **LIMITED**: only with non-default flag combos / platform caveats
+- **FAIL / unsupported**: RO not enforced (F14 if advertised as RO)
+
+Be explicit about Windows vs Linux/macOS for Grok OS sandbox (Linux/macOS = 未実測 on this host; docs-only).
+
+### (c) go/no-go
+Recommend go or no-go for v0.4 adapter work.
+- If **go**: name ≤2 runtimes, minimal scope (which files/ops), what stays Codex-only, acceptance tests for RO enforcement.
+- If **no-go**: one-paragraph rationale suitable for `plans/README.md` Findings considered and rejected.
+
+## Acceptance checks
+- Design addresses (a)(b)(c) with citations to the empirical table above (not generic industry knowledge).
+- Every FAIL runtime is not recommended as first-class.
+- No product code changes proposed as "must do now" inside this design job.
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks
+
+## Assumptions
+- Operator empirical results are authoritative for this Windows host.
+- v0.4 implement would still require a separate user approval after this spike.
+
+## Unverified
+- Grok OS sandbox on Linux/macOS (docs only).
+- Standalone `gemini` CLI (not installed).
+- Whether agy has undocumented settings.json allow rules that could enforce RO without `--dangerously-skip-permissions`.
+- Exact Grok internal tool IDs for a complete denylist (allowlist worked; partial denylist failed).

@@ -71,12 +71,21 @@ README への反映
 
 ## Done criteria
 
-- [ ] `docs/adapter-design.md` が 4 必須セクションを持ち、対応表が実測ベース
+- [x] `docs/adapter-design.md` が 4 必須セクションを持ち、対応表が実測ベース
       (実測できなかった項目は「未実測・文書ベース」と明記)
-- [ ] read-only を強制できない runtime が明確に不合格扱いされている
-- [ ] Codex レビュー packet 済み
-- [ ] `git diff --stat` に `scripts/` が現れない
-- [ ] go/no-go とその根拠が plans/README.md に記録されている
+- [x] read-only を強制できない runtime が明確に不合格扱いされている
+- [x] Codex レビュー packet 済み
+- [x] `git diff --stat` に `scripts/` が現れない
+- [x] go/no-go とその根拠が plans/README.md に記録されている
+
+## Spike result (2026-07-23)
+
+- **NO-GO** (user decision 2026-07-23) — harness stays **Grok + Codex** two-agent only. No multi-runtime adapter.
+- Analysis (subordinate) had allowed conditional GO with codex+claude; user overrode to NO-GO.
+- Design packet: `.agents/docs/packets/plan-007-design.prompt.txt` → `.agents/logs/codex/plan-007-design.last.txt`
+- Review packet: `.agents/docs/packets/plan-007-review.prompt.txt` → `.agents/logs/codex/plan-007-review.last.txt`
+- Empirical: `.agents/docs/packets/plan-007-empirical.md`
+- Deliverable: `docs/adapter-design.md` (sections 1–3 kept as measured rationale; §4 = NO-GO)
 
 ## STOP conditions
 
@@ -85,5 +94,6 @@ README への反映
 
 ## Maintenance notes
 
-- go の場合、plan 008(実装)は本 spike の文書を Current state として書けるはず
+- NO-GO: do not open a v0.4 adapter implement plan from this spike. Keep the doc as rejected-direction evidence.
+- Plan 008 is independent (L2 partial-failure recovery) — not an adapter follow-on.
 - CLI のバージョンを対応表に必ず記録する(意味論はバージョンで変わる)
