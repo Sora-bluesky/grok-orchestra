@@ -1,0 +1,37 @@
+## Objective
+Review Plan 006 L2 worktree helper implementation for F10 (no auto-merge), F08 (L0/L1 skip on -Worktree), correctness, and test coverage. Do not modify files.
+
+## Constraints
+- read-only; do not modify any files
+- Do not run network tools
+- Do not invoke codex recursively
+- Respond in Japanese
+- Keep the whole answer under 100 lines
+- Focus only on Relevant files
+
+## Relevant files
+- scripts/worktree-job.ps1
+- scripts/delegate-codex.ps1
+- scripts/check.ps1
+- scripts/install.ps1 (worktree-job + *.worktree.json only)
+- tests/worktree-job.Tests.ps1
+- .agents/rules/isolation.md
+- .agents/docs/DESIGN.md
+- plans/006-l2-worktree-helper.md
+- .gitignore
+
+## Acceptance checks
+- Answer includes ## TL;DR
+- Verdict: APPROVE | APPROVE_WITH_NITS | REQUEST_CHANGES
+- Explicitly judge: collect never merge/rebase/cherry-pick/checkout/reset (F10)
+- Explicitly judge: -Worktree implement skips write-job.lock and L1 lease
+- Explicitly judge: tests assert main HEAD unchanged after collect
+- List concrete defects with file:line or file + symptom
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks

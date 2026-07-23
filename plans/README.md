@@ -56,8 +56,9 @@ PR 作成後に Codex bot 等のレビューが付いたら、次の**有界ル�
 | 003  | install.ps1 ワンコマンド導入 | P2 | M | 001 | DONE |
 | 004  | エンドツーエンド walkthrough ドキュメント | P2 | S | 002 | DONE |
 | 005  | v0.2 deferred 4 件の hardening(-z 化・サイズ上限・実パス比較) | P1 | M | — | DONE |
-| 006  | L2 worktree ヘルパー(collect は自動マージしない) | P1 | L | 005 | TODO |
+| 006  | L2 worktree ヘルパー(collect は自動マージしない) | P1 | L | 005 | DONE |
 | 007  | ワーカーアダプタ層の設計 spike(実装なし・go/no-go) | P2 | M | — | TODO |
+| 008  | Invoke-New/Cleanup の partial-failure リカバリを一括再設計 | P2 | M | 006 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
@@ -77,6 +78,26 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | leading-whitespace filename segments collapse in normalization (`scripts/lib/path-normalize.ps1`) | P1 | **RESOLVED (plan 005)** | path-normalize no longer Trim()s whole paths; segment spaces preserved; paths come from `-z` raw. |
 | unbounded content scan of large untracked files (`verify-job.ps1` marker scan) | P2 | **RESOLVED (plan 005)** | Untracked content scan skips files > 1MB with `[WARN] scan`. |
 | symlink/junction alias defeats self-target check (`scripts/install.ps1` Test-SamePath) | P2 | **RESOLVED (plan 005)** | `Resolve-ComparablePath` follows junction/symlink Target/ResolvedTarget then compares. |
+
+## Follow-up / deferred (PR #17 review)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| `install.ps1` `Resolve-ComparablePath`: fail closed when the junction chain exceeds the 16-hop cap (currently returns the partially resolved path) | P2 | deferred | Deferred from PR #17 review (round budget exhausted). Replied-to on the PR but not previously recorded here. |
+
+## Follow-up / deferred (plan 006 adversarial verify)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| concurrent main-tree + L2 disjoint-write defense-in-depth test | P3 | deferred | Covered by design (L2 skips L0/L1; tree separation). Full concurrent stress test deferred post-006. |
+
+## Follow-up / deferred (PR #18 Codex review)
+
+| Source | Severity | Status | Notes |
+|--------|----------|--------|-------|
+| `install.ps1` managed gitignore block not upgraded on re-install (missing `*.worktree.json` on upgraded targets) | P2 | deferred | Installer upgrade-migration semantics (plan 003 territory). Recorded from PR #18 bot review round 1. |
+| Invoke-Cleanup -Force fallback catch path (locked live worktree: `remove --force` fails -> Remove-Item + prune) lacks the post-prune registration re-check the dir-gone else-branch got in fix #7; a locked worktree (never created by the helper; requires manual `git worktree lock`) can leave a dangling registration + status=removed. Consolidate the post-prune re-check across BOTH cleanup paths in a follow-up. | P2 | deferred → **plan 008** | Same class as fix #7 (2nd occurrence). Non-F10, narrow defense-in-depth. Helper never creates locked worktrees. Scoped round 3: document only; do not fix here. |
+| Invoke-New: `git worktree add` can fail AFTER creating dir+branch+registration (e.g. a nonzero `post-checkout` hook). `$createdWorktree` is set only after `Get-Git` returns, so the catch releases the claim metadata but leaves an orphan worktree+branch (doctor-invisible; JobId then blocked by the orphan branch). `worktree-job.ps1:411-412`. | P2 | deferred → **plan 008** | Same partial-failure class (3rd occurrence). Non-F10, narrow (needs a failing post-checkout hook). PR #18 bot review; user-authorized document-and-merge. Re-probe canonical path/registration after any add failure and reconcile. |
 
 ## Dependency notes
 

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Mechanical verification gate (judge only — never commit/merge/fix).
+  Mechanical verification gate (judge only - never commit/merge/fix).
 .PARAMETER JobId
   Job id used for Codex log path .agents/logs/codex/{JobId}.last.txt
 .PARAMETER OwnedPaths
@@ -63,7 +63,7 @@ function ConvertTo-StringArray {
   if ($null -eq $Value) {
     return , ([string[]]@())
   }
-  # Strings are IEnumerable[char] — must not foreach the characters.
+  # Strings are IEnumerable[char] - must not foreach the characters.
   if ($Value -is [string]) {
     return , ([string[]]@([string]$Value))
   }
@@ -150,7 +150,7 @@ function Invoke-GitRaw {
 
 function Split-GitNulRecords {
   # Always return a flat string[] via ConvertTo-StringArray (never unary-comma nested).
-  # PS 5.1 compatible: split on [char]0 — NOT `u{0} (PS 6+ only).
+  # PS 5.1 compatible: split on [char]0 - NOT `u{0} (PS 6+ only).
   param([string] $Raw)
   if ([string]::IsNullOrEmpty($Raw)) {
     return , ([string[]]@())
@@ -210,7 +210,7 @@ function Get-UntrackedPaths {
     $xy = $rec.Substring(0, 2)
     $path = if ($rec.Length -gt 3 -and $rec[2] -eq ' ') { $rec.Substring(3) } else { $rec.Substring(2) }
     $path = ConvertTo-RepoSlashPath $path
-    # Rename/copy: next NUL field is the other path — skip it for untracked listing.
+    # Rename/copy: next NUL field is the other path - skip it for untracked listing.
     if ($xy -match '^[RC]') {
       $i += 2
       continue
@@ -353,7 +353,7 @@ function Test-UnderOwnedPaths {
     [string] $Path,
     [string[]] $Owned
   )
-  # Segment normalize (shared with lease-paths). Never TrimStart('.') — that strips ".agents".
+  # Segment normalize (shared with lease-paths). Never TrimStart('.') - that strips ".agents".
   $p = ConvertTo-NormalizedRepoPath -Path $Path
   if (-not $p) { return $false }
   foreach ($o in $Owned) {
@@ -367,135 +367,147 @@ function Test-UnderOwnedPaths {
 }
 
 $root = Get-RepoRoot
-Set-Location $root
-$items = [System.Collections.Generic.List[object]]::new()
-$fail = $false
+# Always restore caller's cwd (interactive collect must not leave Operator in a worktree).
+# try/finally runs before exit 0/1 in both Windows PowerShell 5.1 and pwsh.
+$prevLocation = $null
+try { $prevLocation = (Get-Location).Path } catch { $prevLocation = $null }
 
-# 1. Status / log
-if ($SkipLog) {
-  $items.Add((Write-Item PASS 'status:log' 'skipped (-SkipLog)')) | Out-Null
-}
-else {
-  $logPath = Join-Path $root ".agents\logs\codex\$JobId.last.txt"
-  if (-not (Test-Path -LiteralPath $logPath)) {
-    $items.Add((Write-Item FAIL 'status:log' "missing: $logPath")) | Out-Null
-    $fail = $true
-  }
-  elseif ((Get-Item -LiteralPath $logPath).Length -eq 0) {
-    $items.Add((Write-Item FAIL 'status:log' "empty: $logPath")) | Out-Null
-    $fail = $true
+try {
+  Set-Location -LiteralPath $root
+  $items = [System.Collections.Generic.List[object]]::new()
+  $fail = $false
+
+  # 1. Status / log
+  if ($SkipLog) {
+    $items.Add((Write-Item PASS 'status:log' 'skipped (-SkipLog)')) | Out-Null
   }
   else {
-    $items.Add((Write-Item PASS 'status:log' "non-empty: $logPath")) | Out-Null
-  }
-}
-
-# Resolve BaseRef early (fail closed)
-$baseSha = ''
-try {
-  if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
-    $baseSha = Resolve-BaseRefSha -Ref $BaseRef
-    $items.Add((Write-Item PASS 'git:baseref' "resolved to $baseSha")) | Out-Null
-  }
-}
-catch {
-  $items.Add((Write-Item FAIL 'git:baseref' $_.Exception.Message)) | Out-Null
-  $fail = $true
-}
-
-# 2. Diff scope (worktree + index + untracked; BaseRef uses resolved SHA only)
-$changed = @()
-if (-not $fail) {
-  $changed = @(Get-ChangedPaths -BaseSha $baseSha)
-}
-if ($script:GitFailed) {
-  $items.Add((Write-Item FAIL 'git' (($script:GitFailMessages | Select-Object -First 3) -join '; '))) | Out-Null
-  $fail = $true
-}
-
-if (-not $fail) {
-  if ($OwnedPaths.Count -gt 0) {
-    $escapes = @()
-    foreach ($path in $changed) {
-      if (-not (Test-UnderOwnedPaths -Path $path -Owned $OwnedPaths)) {
-        $escapes += $path
-      }
+    $logPath = Join-Path $root ".agents\logs\codex\$JobId.last.txt"
+    if (-not (Test-Path -LiteralPath $logPath)) {
+      $items.Add((Write-Item FAIL 'status:log' "missing: $logPath")) | Out-Null
+      $fail = $true
     }
-    if ($escapes.Count -gt 0) {
-      $items.Add((Write-Item FAIL 'diff:scope' ("outside owned_paths: {0}" -f ($escapes -join ', ')))) | Out-Null
+    elseif ((Get-Item -LiteralPath $logPath).Length -eq 0) {
+      $items.Add((Write-Item FAIL 'status:log' "empty: $logPath")) | Out-Null
       $fail = $true
     }
     else {
-      $items.Add((Write-Item PASS 'diff:scope' ("{0} path(s) within owned_paths" -f $changed.Count))) | Out-Null
+      $items.Add((Write-Item PASS 'status:log' "non-empty: $logPath")) | Out-Null
     }
   }
-  else {
-    $items.Add((Write-Item PASS 'diff:scope' ("owned_paths not set; {0} changed path(s) observed" -f $changed.Count))) | Out-Null
-  }
-}
 
-# 3. Stub detection (WARN only)
-$addedLines = @()
-$deleted = @()
-if (-not $fail) {
-  $addedLines = @(Get-AddedDiffLines -BaseSha $baseSha)
-  $deleted = @(Get-DeletedPaths -BaseSha $baseSha)
+  # Resolve BaseRef early (fail closed)
+  $baseSha = ''
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
+      $baseSha = Resolve-BaseRefSha -Ref $BaseRef
+      $items.Add((Write-Item PASS 'git:baseref' "resolved to $baseSha")) | Out-Null
+    }
+  }
+  catch {
+    $items.Add((Write-Item FAIL 'git:baseref' $_.Exception.Message)) | Out-Null
+    $fail = $true
+  }
+
+  # 2. Diff scope (worktree + index + untracked; BaseRef uses resolved SHA only)
+  $changed = @()
+  if (-not $fail) {
+    $changed = @(Get-ChangedPaths -BaseSha $baseSha)
+  }
   if ($script:GitFailed) {
     $items.Add((Write-Item FAIL 'git' (($script:GitFailMessages | Select-Object -First 3) -join '; '))) | Out-Null
     $fail = $true
   }
-}
 
-if (-not $fail) {
-  $stubHits = @()
-  foreach ($line in $addedLines) {
-    if ($line -match 'NotImplementedError' -or $line -match 'TODO:' -or $line -match "throw new Error\('not implemented'\)") {
-      $stubHits += $line.Trim()
-    }
-  }
-  if ($stubHits.Count -gt 0) {
-    $sample = ($stubHits | Select-Object -First 3) -join ' | '
-    $items.Add((Write-Item WARN 'stub' "possible stub markers in added lines: $sample")) | Out-Null
-  }
-  else {
-    $items.Add((Write-Item PASS 'stub' 'no stub markers in added lines')) | Out-Null
-  }
-
-  foreach ($skippedPath in @($script:ScanSkipped)) {
-    $items.Add((Write-Item WARN 'scan' ("skipped {0} (size > 1MB)" -f $skippedPath))) | Out-Null
-  }
-
-  # 4. Test weakening (F07) — staged + unstaged
-  $testDeleteHits = @($deleted | Where-Object { Test-IsTestLikePath $_ })
-  $skipHits = @()
-  foreach ($line in $addedLines) {
-    if ($line -match 'Skip\s*=\s*\$true' -or $line -match 'it\.skip' -or $line -match 'describe\.skip' -or $line -match '@pytest\.mark\.skip') {
-      $skipHits += $line.Trim()
-    }
-  }
-
-  if ($testDeleteHits.Count -gt 0 -or $skipHits.Count -gt 0) {
-    $msgParts = @()
-    if ($testDeleteHits.Count -gt 0) { $msgParts += "deleted test-like paths: $($testDeleteHits -join ', ')" }
-    if ($skipHits.Count -gt 0) { $msgParts += "skip markers: $(($skipHits | Select-Object -First 3) -join ' | ')" }
-    $msg = $msgParts -join '; '
-    if ($AcceptTestChanges) {
-      $items.Add((Write-Item PASS 'f07:tests' "accepted via -AcceptTestChanges: $msg")) | Out-Null
+  if (-not $fail) {
+    if ($OwnedPaths.Count -gt 0) {
+      $escapes = @()
+      foreach ($path in $changed) {
+        if (-not (Test-UnderOwnedPaths -Path $path -Owned $OwnedPaths)) {
+          $escapes += $path
+        }
+      }
+      if ($escapes.Count -gt 0) {
+        $items.Add((Write-Item FAIL 'diff:scope' ("outside owned_paths: {0}" -f ($escapes -join ', ')))) | Out-Null
+        $fail = $true
+      }
+      else {
+        $items.Add((Write-Item PASS 'diff:scope' ("{0} path(s) within owned_paths" -f $changed.Count))) | Out-Null
+      }
     }
     else {
-      $items.Add((Write-Item FAIL 'f07:tests' "$msg (use -AcceptTestChanges to override)")) | Out-Null
+      $items.Add((Write-Item PASS 'diff:scope' ("owned_paths not set; {0} changed path(s) observed" -f $changed.Count))) | Out-Null
+    }
+  }
+
+  # 3. Stub detection (WARN only)
+  $addedLines = @()
+  $deleted = @()
+  if (-not $fail) {
+    $addedLines = @(Get-AddedDiffLines -BaseSha $baseSha)
+    $deleted = @(Get-DeletedPaths -BaseSha $baseSha)
+    if ($script:GitFailed) {
+      $items.Add((Write-Item FAIL 'git' (($script:GitFailMessages | Select-Object -First 3) -join '; '))) | Out-Null
       $fail = $true
     }
   }
-  else {
-    $items.Add((Write-Item PASS 'f07:tests' 'no test deletion or skip markers detected')) | Out-Null
+
+  if (-not $fail) {
+    $stubHits = @()
+    foreach ($line in $addedLines) {
+      if ($line -match 'NotImplementedError' -or $line -match 'TODO:' -or $line -match "throw new Error\('not implemented'\)") {
+        $stubHits += $line.Trim()
+      }
+    }
+    if ($stubHits.Count -gt 0) {
+      $sample = ($stubHits | Select-Object -First 3) -join ' | '
+      $items.Add((Write-Item WARN 'stub' "possible stub markers in added lines: $sample")) | Out-Null
+    }
+    else {
+      $items.Add((Write-Item PASS 'stub' 'no stub markers in added lines')) | Out-Null
+    }
+
+    foreach ($skippedPath in @($script:ScanSkipped)) {
+      $items.Add((Write-Item WARN 'scan' ("skipped {0} (size > 1MB)" -f $skippedPath))) | Out-Null
+    }
+
+    # 4. Test weakening (F07) - staged + unstaged
+    $testDeleteHits = @($deleted | Where-Object { Test-IsTestLikePath $_ })
+    $skipHits = @()
+    foreach ($line in $addedLines) {
+      if ($line -match 'Skip\s*=\s*\$true' -or $line -match 'it\.skip' -or $line -match 'describe\.skip' -or $line -match '@pytest\.mark\.skip') {
+        $skipHits += $line.Trim()
+      }
+    }
+
+    if ($testDeleteHits.Count -gt 0 -or $skipHits.Count -gt 0) {
+      $msgParts = @()
+      if ($testDeleteHits.Count -gt 0) { $msgParts += "deleted test-like paths: $($testDeleteHits -join ', ')" }
+      if ($skipHits.Count -gt 0) { $msgParts += "skip markers: $(($skipHits | Select-Object -First 3) -join ' | ')" }
+      $msg = $msgParts -join '; '
+      if ($AcceptTestChanges) {
+        $items.Add((Write-Item PASS 'f07:tests' "accepted via -AcceptTestChanges: $msg")) | Out-Null
+      }
+      else {
+        $items.Add((Write-Item FAIL 'f07:tests' "$msg (use -AcceptTestChanges to override)")) | Out-Null
+        $fail = $true
+      }
+    }
+    else {
+      $items.Add((Write-Item PASS 'f07:tests' 'no test deletion or skip markers detected')) | Out-Null
+    }
+  }
+
+  # 5. Summary
+  if ($fail) {
+    Write-Host 'verify-job: FAIL'
+    exit 1
+  }
+  Write-Host 'verify-job: PASS'
+  exit 0
+}
+finally {
+  if ($prevLocation -and (Test-Path -LiteralPath $prevLocation)) {
+    try { Set-Location -LiteralPath $prevLocation } catch { }
   }
 }
-
-# 5. Summary
-if ($fail) {
-  Write-Host 'verify-job: FAIL'
-  exit 1
-}
-Write-Host 'verify-job: PASS'
-exit 0

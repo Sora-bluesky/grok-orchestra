@@ -18,6 +18,7 @@ HANDOFF.md
 .agents/worktrees/
 .agents/locks/write-job.lock
 .agents/locks/*.lease.json
+.agents/locks/*.worktree.json
 .agents/locks/leases.json
 
 # Keep structure

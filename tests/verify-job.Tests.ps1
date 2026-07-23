@@ -3,6 +3,7 @@
 
 Describe 'verify-job.ps1' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot 'helpers\Clear-TestDriveGit.ps1')
     $script:OrchestraRoot = Split-Path $PSScriptRoot -Parent
     $script:VerifyScript = Join-Path $script:OrchestraRoot 'scripts\verify-job.ps1'
   }
@@ -24,13 +25,40 @@ Describe 'verify-job.ps1' {
   }
 
   AfterEach {
-    Pop-Location
+    try { Pop-Location } catch { }
+    Clear-TestDriveAfterGit -RepoRoot $script:Repo -DriveRoot $TestDrive
+  }
+
+  AfterAll {
+    Clear-TestDriveAfterGit -DriveRoot $TestDrive
   }
 
   It 'passes on clean tree with -SkipLog' {
     $output = & $script:VerifyScript -JobId 'x' -SkipLog -RepoRoot $script:Repo *>&1
     $LASTEXITCODE | Should -Be 0
     ($output | ForEach-Object { "$_" } | Out-String) | Should -Match 'verify-job: PASS'
+  }
+
+  It 'restores caller PWD after PASS and FAIL' {
+    $caller = Join-Path $TestDrive ("caller-pwd-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $caller | Out-Null
+    Push-Location $caller
+    try {
+      $beforePass = (Get-Location).Path
+      & $script:VerifyScript -JobId 'pwd-pass' -SkipLog -RepoRoot $script:Repo *>$null
+      $LASTEXITCODE | Should -Be 0
+      (Get-Location).Path | Should -Be $beforePass
+
+      # Force FAIL via OwnedPaths escape
+      Set-Content -LiteralPath (Join-Path $script:Repo 'src\app.ps1') -Value '# changed' -Encoding UTF8
+      $beforeFail = (Get-Location).Path
+      & $script:VerifyScript -JobId 'pwd-fail' -SkipLog -RepoRoot $script:Repo -OwnedPaths @('docs') *>$null
+      $LASTEXITCODE | Should -Be 1
+      (Get-Location).Path | Should -Be $beforeFail
+    }
+    finally {
+      Pop-Location
+    }
   }
 
   It 'fails when changed path escapes OwnedPaths' {
