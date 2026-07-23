@@ -128,7 +128,7 @@ Classify-Exit(runtime, exitCode, capturedResult)
 | Logical access | Codex mapping (existing) | Claude mapping (**proposed / acceptance pending**) |
 |----------------|--------------------------|-----------------------------------------------------|
 | `read-only` | `exec -C <dir> -s read-only -o <last>` + stdin prompt; **requires sandbox helper on PATH on Windows** | headless `-p` + positive allowlist `--tools Read,Grep,Glob,LS` (marker blocked in probe); cwd via harness `Set-Location`; stdout capture strategy still needs semantic-last-message acceptance |
-| `workspace-write` | `exec -C <dir> -s workspace-write -o <last>` + stdin | **unsupported** — hard-reject (write semantics not measured for adapter use) |
+| `workspace-write` | `exec -C <dir> -s workspace-write -o <last>` + stdin (**existing bridge mapping; not marker-probed in plan 007**) | **unsupported** — hard-reject (write semantics not measured for adapter use) |
 
 Canonical Claude RO candidate mapping: **positive tool allowlist** (fails closed against unlisted tools). Plan-mode + disallowed write tools also blocked the marker, but the allowlist is the clearer fail-closed policy.
 
@@ -154,7 +154,7 @@ Canonical Claude RO candidate mapping: **positive tool allowlist** (fails closed
 
 | Runtime | Classification | Evidence and consequence |
 |---------|----------------|--------------------------|
-| **Codex** | **PASS — first-class RO + write, when resolver uses a working sandbox helper** | Helper-on: usable sandbox reject (marker absent). Helper-off: fail-closed shell (safe but **not** a usable worker). Acceptance must use the **same** resolved executable and prove positive-read + blocked-write. |
+| **Codex** | **PASS — first-class RO (spike-measured), when resolver uses a working sandbox helper** | Helper-on: usable sandbox reject (marker absent). Helper-off: fail-closed shell (safe but **not** a usable worker). **`workspace-write` was not marker-probed in this spike** (existing CLI flag + `delegate-codex.ps1` mapping only — treat write as production/current-bridge, not spike-measured). Acceptance for RO must use the **same** resolved executable and prove positive-read + blocked-write. |
 | **Claude Code** | **PASS on write-block probes; first-class RO only after full acceptance probe** | App-level allowlist/plan blocked marker. Still **candidate** until positive-read + semantic capture pass through the adapter path. `implement`/`fix` hard-reject. |
 | **Grok** | **LIMITED (not a multi-runtime peer)** | App-level allowlist/deny **did** block writes (same class of enforcement as Claude). **Advertised** `--sandbox read-only` **failed open on Windows** — that product guarantee is broken here. Part of the measured case against first-class multi-runtime RO, **not** a claim that app policy cannot enforce RO. Linux/macOS OS sandbox remains **未実測・文書ベース**. |
 | **agy** | **FAIL / unsupported** | Every tested combination allowed the marker write. Exit `0` is useless as a policy signal. Advertising RO would be F14. |
@@ -172,7 +172,7 @@ Canonical Claude RO candidate mapping: **positive tool allowlist** (fails closed
 
 ### Final decision: **NO-GO**
 
-Rejected multi-runtime adapter expansion: only Codex currently offers a measured usable OS-level workspace sandbox on this Windows host for both RO and write roles; other CLIs either fail-open on advertised sandbox flags (Grok/agy) or require a second app-policy matrix (Claude) whose full adapter handoff (positive-read + semantic capture) was not completed in the spike. Prefer keeping a single Codex bridge (Grok operator + Codex worker). The ≤2-runtime adapter value is not worth the flag/version matrix or diluting the two-agent contract.
+Rejected multi-runtime adapter expansion: only Codex currently offers a **spike-measured** usable OS-level **read-only** sandbox on this Windows host (`-s read-only` helper-on marker probes). **`workspace-write` was not re-probed in plan 007** (it remains the existing `delegate-codex.ps1` write-path mapping, not spike evidence). Other CLIs either fail-open on advertised sandbox flags (Grok/agy) or require a second app-policy matrix (Claude) whose full adapter handoff (positive-read + semantic capture) was not completed in the spike. Prefer keeping a single Codex bridge (Grok operator + Codex worker). The ≤2-runtime adapter value is not worth the flag/version matrix or diluting the two-agent contract.
 
 This is a **product/ops ownership call by the user**. The spike analysis below remains as the subordinate evidence record, not as authorization to implement.
 
