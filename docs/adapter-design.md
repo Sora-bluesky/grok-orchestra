@@ -238,7 +238,7 @@ Both empty — **no `scripts/` edits** in this spike.
 | “1:1 loads” too strong | P1 | Reworded to extractable with listed gaps |
 | Codex no-helper equated to usable RO | P1 | Split fail-closed vs usable enforcement |
 | Claude vs Grok classification inconsistency | P1 | Clarified: both have app RO; Grok limited for fail-open OS sandbox + ops ≤2 choice |
-| Unconditional first-class GO | P1 | Downgraded to **conditional GO** + acceptance gate |
+| Unconditional first-class GO | P1 | Downgraded to conditional GO in spike analysis; **user later set NO-GO** (§4) |
 | Plan DONE before review log | P1 | Review log present; plan checklist updated after this doc |
 | Primary public URL for Grok sandbox | P1 | Local guide path recorded; no separate public URL verified in spike — marked local-docs |
 | Grok denylist cause asserted | P2 | Softened to incomplete/unidentified |
