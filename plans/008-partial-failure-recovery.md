@@ -39,8 +39,14 @@ plan 006 マージをブロックしないと判断して defer した(PR #18、
    解放するのに orphan worktree+branch を残す(doctor 不可視・JobId ブロック)。
    `worktree-job.ps1:411-412` 付近。
 
-いずれも**現行 helper が自力では作らない状態**(手動 lock / 失敗するフック)が前提の
-防御的エッジ。
+3. **collect fail-open**(PR #18 bot 3637808693): `Invoke-Collect` は `verify-job.ps1` を
+   `ErrorActionPreference='Continue'` で `& $verifyScript` 呼び出し、`$verifyCode = $LASTEXITCODE`
+   を判定に使う。verify-job が見つからない/`exit` 前に異常終了すると `$LASTEXITCODE` は
+   直前の git 成功(0)を保持しうるため、**検証未完了のまま status=collected + merge 案内**に
+   なる(fail-open)。非 F10・狭い(verify-job は harness 同梱)。
+
+いずれも**現行 helper が自力では作らない状態**(手動 lock / 失敗するフック / verify-job 欠損)
+が前提の防御的エッジ。
 
 ## 設計方針(この plan で確定させる)
 
@@ -56,6 +62,10 @@ plan 006 マージをブロックしないと判断して defer した(PR #18、
    (ヘルパー関数に切り出す)。locked で登録が残るなら status=removed を書かず throw + unlock 案内。
 3. **check.ps1**: `status=creating` の age-gate 回収(既存)が、new の add 失敗で残った
    partial(dir/branch あり)を安全に WARN 報告することを確認・テスト追加。
+4. **collect fail-closed**: `Invoke-Collect` は verify-job の**明示的な正常完了**を確認してから
+   のみ結果を受理する(呼び出し前に `$LASTEXITCODE` をリセット/非ゼロ sentinel を置き、
+   `& $verifyScript` を try/catch で囲む)。verify-job が起動失敗/異常終了したら FAIL 扱いで
+   status=collected にしない。
 
 ## Scope
 
@@ -85,6 +95,7 @@ pwsh 7 と Windows PowerShell 5.1 の両方)
 - [ ] `git worktree add` の作成後失敗(post-checkout 非ゼロ)で orphan が残らない
       (claim 保持で doctor 回収可、またはクリーンアップ)
 - [ ] check.ps1 が partial creating claim を安全に報告
+- [ ] collect は verify-job の正常完了を確認してからのみ collected(欠損/異常終了は FAIL 扱い)
 - [ ] Pester 両シェル green、F10 ガード diff なし
 - [ ] plans/README.md の PR #18 deferred 2 行を RESOLVED(plan 008)に更新
 
