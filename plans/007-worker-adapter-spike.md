@@ -71,12 +71,20 @@ README への反映
 
 ## Done criteria
 
-- [ ] `docs/adapter-design.md` が 4 必須セクションを持ち、対応表が実測ベース
+- [x] `docs/adapter-design.md` が 4 必須セクションを持ち、対応表が実測ベース
       (実測できなかった項目は「未実測・文書ベース」と明記)
-- [ ] read-only を強制できない runtime が明確に不合格扱いされている
-- [ ] Codex レビュー packet 済み
-- [ ] `git diff --stat` に `scripts/` が現れない
-- [ ] go/no-go とその根拠が plans/README.md に記録されている
+- [x] read-only を強制できない runtime が明確に不合格扱いされている
+- [x] Codex レビュー packet 済み
+- [x] `git diff --stat` に `scripts/` が現れない
+- [x] go/no-go とその根拠が plans/README.md に記録されている
+
+## Spike result (2026-07-23)
+
+- **CONDITIONAL GO** — v0.4 candidate: `codex` + `claude` (Claude RO candidate until acceptance). Grok LIMITED, agy FAIL.
+- Design packet: `.agents/docs/packets/plan-007-design.prompt.txt` → `.agents/logs/codex/plan-007-design.last.txt`
+- Review packet: `.agents/docs/packets/plan-007-review.prompt.txt` → `.agents/logs/codex/plan-007-review.last.txt`
+- Empirical: `.agents/docs/packets/plan-007-empirical.md`
+- Deliverable: `docs/adapter-design.md` (P1 review findings folded in)
 
 ## STOP conditions
 

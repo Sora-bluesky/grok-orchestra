@@ -1,0 +1,43 @@
+## Objective
+Independently review `docs/adapter-design.md` (plan 007 worker-adapter design spike) for factual accuracy against the empirical packet, contract soundness, and whether the GO recommendation is justified or over/under-claimed.
+
+## Constraints
+- READ-ONLY review. Do not edit files. Do not implement code.
+- Judge from evidence in the empirical packet and the design doc — not generic multi-agent industry advice.
+- Flag any claim that upgrades 未実測 items to “works,” or that treats exit code 0 as proof of RO enforcement.
+- Forbidden: danger flags; scope creep into scripts/ patches; rewriting the go decision without citing probe rows.
+
+## Relevant files
+- `docs/adapter-design.md` (primary under review)
+- `.agents/docs/packets/plan-007-empirical.md`
+- `.agents/docs/packets/plan-007-design.prompt.txt`
+- `.agents/logs/codex/plan-007-design.last.txt`
+- `scripts/delegate-codex.ps1` (verify “loads onto contract” claims against file:line)
+- `plans/007-worker-adapter-spike.md`
+- `plans/README.md` (status / go-no-go line)
+
+## Acceptance checks
+- Review covers: (1) empirical table fidelity, (2) five-op contract, (3) guarantees-broken classifications, (4) go/no-go scope ≤2 runtimes, (5) scripts/ untouched by spike intent.
+- Each finding is severity-tagged: P0 blocking / P1 should-fix-doc / P2 nit / OK.
+- If the GO is wrong, state the corrected recommendation and why.
+
+## Output format
+## TL;DR
+## Analysis
+## Plan
+## Patch Strategy
+## Validation
+## Risks
+
+For ## Analysis, use subsections:
+### Empirical fidelity
+### Adapter contract
+### Guarantees-broken
+### Go/no-go
+### Doc gaps
+
+## Assumptions
+- Spike is docs-only; review findings may request doc edits only.
+
+## Unverified
+- Anything outside the empirical packet remains unverified on this host.
