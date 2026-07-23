@@ -71,7 +71,8 @@ Phase 3 送りになっていた最後の隔離レイヤー。**設計原則: wo
    照合し、不一致(未登録パス、別ブランチ、detached HEAD、登録先不一致)は拒否。
    worktree 内に未コミット変更が残っている場合も拒否。
    検証: `verify-job.ps1 -RepoRoot <worktree-path> -JobId <JobId> -BaseRef <base_sha>`
-   (+ 保存済み `OwnedPaths`; `log_required=false` のときだけ `-SkipLog`)。
+   (+ 保存済み `OwnedPaths`; `log_required=false` のときだけ `-SkipLog`;
+   Operator がレビュー後に渡す `-AcceptTestChanges` は collect から verify-job へ転送)。
    PASS/FAIL と `git diff <base_sha>..wt/<JobId> --stat` を表示。
    出力の最後に Operator 向けの次アクション(`git merge --no-ff wt/<JobId>` または
    PR 作成)を**案内するのみ**。

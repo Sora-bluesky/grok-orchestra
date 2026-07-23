@@ -22,6 +22,9 @@
 .PARAMETER Force
   cleanup: allow removing a dirty worktree. Never deletes branch wt/<JobId>.
 
+.PARAMETER AcceptTestChanges
+  collect: forward -AcceptTestChanges to verify-job (F07 override after Operator review).
+
 .PARAMETER RepoRoot
   Control-plane repository root (default: parent of scripts/).
 
@@ -44,6 +47,8 @@ param(
   [switch] $SkipLog,
 
   [switch] $Force,
+
+  [switch] $AcceptTestChanges,
 
   [string] $RepoRoot = '',
 
@@ -448,7 +453,8 @@ function Invoke-Collect {
   param(
     [string] $ControlRoot,
     [string] $Locks,
-    [string] $Id
+    [string] $Id,
+    [bool] $AcceptTests = $false
   )
 
   Assert-SafeJobId -Id $Id
@@ -485,6 +491,7 @@ function Invoke-Collect {
   }
   if ($owned.Count -gt 0) { $verifyArgs['OwnedPaths'] = $owned }
   if (-not $logRequired) { $verifyArgs['SkipLog'] = $true }
+  if ($AcceptTests) { $verifyArgs['AcceptTestChanges'] = $true }
 
   Write-Host "worktree-job collect: running verify-job on worktree $wtPath (base=$baseSha)"
   # Belt-and-suspenders: restore collect caller's cwd if verify-job ever leaks Set-Location
@@ -665,7 +672,7 @@ switch ($Action) {
     Invoke-New -ControlRoot $control -Locks $LockDir -Id $JobId -Base $BaseRef -Owned $OwnedPaths -LogRequired $logReq
   }
   'collect' {
-    Invoke-Collect -ControlRoot $control -Locks $LockDir -Id $JobId
+    Invoke-Collect -ControlRoot $control -Locks $LockDir -Id $JobId -AcceptTests:$AcceptTestChanges
   }
   'cleanup' {
     Invoke-Cleanup -ControlRoot $control -Locks $LockDir -Id $JobId -ForceRemove:$Force

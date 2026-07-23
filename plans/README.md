@@ -95,6 +95,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | Source | Severity | Status | Notes |
 |--------|----------|--------|-------|
 | `install.ps1` managed gitignore block not upgraded on re-install (missing `*.worktree.json` on upgraded targets) | P2 | deferred | Installer upgrade-migration semantics (plan 003 territory). Recorded from PR #18 bot review round 1. |
+| Invoke-Cleanup -Force fallback catch path (locked live worktree: `remove --force` fails -> Remove-Item + prune) lacks the post-prune registration re-check the dir-gone else-branch got in fix #7; a locked worktree (never created by the helper; requires manual `git worktree lock`) can leave a dangling registration + status=removed. Consolidate the post-prune re-check across BOTH cleanup paths in a follow-up. | P2 | deferred | Same class as fix #7 (2nd occurrence). Non-F10, narrow defense-in-depth. Helper never creates locked worktrees. Scoped round 3: document only; do not fix here. |
 
 ## Dependency notes
 

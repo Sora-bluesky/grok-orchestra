@@ -314,6 +314,39 @@ Describe 'worktree-job.ps1' {
     }
   }
 
+  It 'collect -AcceptTestChanges forwards F07 override; without it stays active' {
+    # Seed a committed test file on main so worktree can delete it (F07 signal)
+    New-Item -ItemType Directory -Force -Path (Join-Path $script:Repo 'tests') | Out-Null
+    Set-Content -LiteralPath (Join-Path $script:Repo 'tests\Sample.Tests.ps1') -Value 'Describe "s" { It "x" { $true | Should -BeTrue } }' -Encoding UTF8
+    git -C $script:Repo add -A | Out-Null
+    git -C $script:Repo commit -qm 'seed test' | Out-Null
+
+    & $script:WtScript -Action new -JobId 'acctest' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
+    $metaPath = Join-Path $script:LockDir 'acctest.worktree.json'
+    $meta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    # Legitimate test deletion in the worktree (F07 without override)
+    Remove-Item -LiteralPath (Join-Path $meta.path 'tests\Sample.Tests.ps1') -Force
+    git -C $meta.path add -A | Out-Null
+    git -C $meta.path commit -qm 'delete test' | Out-Null
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $script:WtScript -Action collect -JobId 'acctest' -RepoRoot $script:Repo -LockDir $script:LockDir *>&1 | Out-Null
+    $codeNo = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    $codeNo | Should -Not -Be 0
+    $metaNo = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaNo.status | Should -Be 'active'
+
+    $ErrorActionPreference = 'Continue'
+    & $script:WtScript -Action collect -JobId 'acctest' -RepoRoot $script:Repo -LockDir $script:LockDir -AcceptTestChanges *>&1 | Out-Null
+    $codeYes = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    $codeYes | Should -Be 0
+    $metaYes = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metaYes.status | Should -Be 'collected'
+  }
+
   It 'collect refuses corrupted base_sha and does not write side files' {
     & $script:WtScript -Action new -JobId 'badbase' -RepoRoot $script:Repo -LockDir $script:LockDir -SkipLog | Out-Null
     $metaPath = Join-Path $script:LockDir 'badbase.worktree.json'

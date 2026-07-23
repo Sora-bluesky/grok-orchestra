@@ -35,8 +35,9 @@ Use when:
 .\scripts\worktree-job.ps1 -Action new -JobId <id> [-BaseRef <sha>] [-OwnedPaths @('src')] [-SkipLog]
 
 # after worker commits in the worktree
-.\scripts\worktree-job.ps1 -Action collect -JobId <id>
+.\scripts\worktree-job.ps1 -Action collect -JobId <id> [-AcceptTestChanges]
 # → runs verify-job -RepoRoot <worktree> -BaseRef <base_sha>; prints diff --stat
+# → -AcceptTestChanges forwards the F07 override to verify-job after Operator review
 # → NEVER merges / rebases / cherry-picks (F10). Operator merges or opens a PR.
 
 # remove worktree dir only (branch wt/<id> retained as evidence)
@@ -58,6 +59,7 @@ Or via delegate:
 - **Worktree dir removal in rollback only if this process completed `git worktree add`.** Pre-existing dirs/branches are never removed by a losing or early-failing `new`.
 - L2 write jobs **do not** take main-tree `write-job.lock` and **do not** acquire L1 leases.
 - `OwnedPaths` (if any) are stored in worktree.json and applied at collect-time verify.
+- `collect -AcceptTestChanges` forwards `-AcceptTestChanges` to verify-job (legitimate test delete/rename/skip after Operator review). Without it, F07 failures leave status=`active`.
 - Isolation is tree separation; still one writer **per worktree**.
 - Manual `codex exec -C .agents/worktrees/...` is **not** the formal L2 path — use the helper so metadata, collect, and doctor stay consistent.
 - Merge only after **verify-job** (via collect) and **Operator judgment** (F10).
