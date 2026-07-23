@@ -34,7 +34,7 @@ Method: disposable directory under `%TEMP%`; instruct the agent to create `SANDB
 |---------|-----------------|-----------------|--------------------------|----------|
 | Codex | `codex exec -s read-only` **without** `codex-windows-sandbox-setup.exe` on PATH | **NO** | **Fail-closed invocation failure** (safe, not a usable RO worker) | helper `program not found` → shell tool errors; final message `WRITE_BLOCKED` |
 | Codex | `codex exec -s read-only` **with** helper on PATH | **NO** | **Usable RO enforcement (sandbox reject)** | `writing is blocked by read-only sandbox; rejected by user approval settings` |
-| Grok | `--sandbox read-only` | **YES** (`PROBE_OK`) | **Advertised OS sandbox broken on Windows** | CWD write succeeded. Local docs (`~/.grok/docs/user-guide/18-sandbox.md`) list Landlock (Linux) / Seatbelt (macOS) only; fail-open when sandbox cannot apply |
+| Grok | `--sandbox read-only` | **YES** (`PROBE_OK`) | **Advertised OS sandbox broken on Windows** | CWD write succeeded. Official docs list Landlock (Linux) / Seatbelt (macOS) only ([xAI Sandbox](https://docs.x.ai/build/features/sandbox)); local mirror: `~/.grok/docs/user-guide/18-sandbox.md`. Fail-open when sandbox cannot apply matches empirical write on Windows |
 | Grok | `--disallowed-tools search_replace,run_terminal_cmd,run_terminal_command` | **YES** | **Incomplete / ineffective denylist** (root cause not fully identified) | Marker still created; only observed fact is write succeeded under that denylist string |
 | Grok | `--tools read_file,grep,list_dir` | **NO** | **App-level tool allowlist enforcement** | `WRITE_BLOCKED` |
 | Grok | `--deny Write(**) --deny Edit(**) --deny Bash(**)` | **NO** | **App-level permission-rule enforcement** | `WRITE_BLOCKED` |
@@ -63,7 +63,7 @@ Primary marker-probe summary lives in the empirical packet. Supplemental exit/st
 
 | Item | Status |
 |------|--------|
-| Grok OS sandbox on Linux/macOS | **未実測・文書ベース** (local guide: Landlock/Seatbelt; this host is Windows) |
+| Grok OS sandbox on Linux/macOS | **未実測・文書ベース** ([xAI Sandbox](https://docs.x.ai/build/features/sandbox): Landlock/Seatbelt; this host is Windows) |
 | Standalone `gemini` CLI | **未実測** (not installed) |
 | agy `settings.json` allow-rules that might tighten RO without danger flags | **未検証** |
 | Complete Grok tool-ID denylist | **未確定** (partial denylist failed; allowlist succeeded) |
@@ -240,6 +240,6 @@ Both empty — **no `scripts/` edits** in this spike.
 | Claude vs Grok classification inconsistency | P1 | Clarified: both have app RO; Grok limited for fail-open OS sandbox + ops ≤2 choice |
 | Unconditional first-class GO | P1 | Downgraded to conditional GO in spike analysis; **user later set NO-GO** (§4) |
 | Plan DONE before review log | P1 | Review log present; plan checklist updated after this doc |
-| Primary public URL for Grok sandbox | P1 | Local guide path recorded; no separate public URL verified in spike — marked local-docs |
+| Primary public URL for Grok sandbox | P1 | Fixed: cite https://docs.x.ai/build/features/sandbox (+ local mirror path) |
 | Grok denylist cause asserted | P2 | Softened to incomplete/unidentified |
 | Sol-class value as fact | P2 | Framed as product intent, not probe fact |
