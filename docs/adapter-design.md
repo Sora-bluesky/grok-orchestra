@@ -1,6 +1,6 @@
 # Worker adapter design spike (plan 007)
 
-**Status:** design spike complete (documents only) — **conditional GO**  
+**Status:** design spike complete (documents only) — **NO-GO** (user decision 2026-07-23)  
 **Date:** 2026-07-23  
 **Host under test:** Windows 11  
 **Probe base:** `C:\Users\sorab\AppData\Local\Temp\grok-orch-007-b3c74558`  
@@ -10,7 +10,7 @@
 **Codex review log:** `.agents/logs/codex/plan-007-review.last.txt`  
 **Empirical packet:** `.agents/docs/packets/plan-007-empirical.md`
 
-> Scope of this document: **no product code**. If implementation is approved later, it is a separate v0.4 job.
+> Scope of this document: **no product code**. The harness remains a **Grok (operator) + Codex (worker)** two-agent orchestra. Sections 1–3 are the evidence-based record of why multi-runtime expansion was rejected.
 
 ---
 
@@ -156,60 +156,47 @@ Canonical Claude RO candidate mapping: **positive tool allowlist** (fails closed
 |---------|----------------|--------------------------|
 | **Codex** | **PASS — first-class RO + write, when resolver uses a working sandbox helper** | Helper-on: usable sandbox reject (marker absent). Helper-off: fail-closed shell (safe but **not** a usable worker). Acceptance must use the **same** resolved executable and prove positive-read + blocked-write. |
 | **Claude Code** | **PASS on write-block probes; first-class RO only after full acceptance probe** | App-level allowlist/plan blocked marker. Still **candidate** until positive-read + semantic capture pass through the adapter path. `implement`/`fix` hard-reject. |
-| **Grok** | **LIMITED — exclude from v0.4** | App-level allowlist/deny **did** block writes (same class of enforcement as Claude). **Advertised** `--sandbox read-only` **failed open on Windows** — that product guarantee is broken here. Exclusion is an **ops product choice** (do not first-class a CLI whose default sandbox story is fail-open on the primary host; keep ≤2 runtimes), **not** a claim that app policy cannot enforce RO. Linux/macOS OS sandbox remains **未実測・文書ベース**. |
+| **Grok** | **LIMITED (not a multi-runtime peer)** | App-level allowlist/deny **did** block writes (same class of enforcement as Claude). **Advertised** `--sandbox read-only` **failed open on Windows** — that product guarantee is broken here. Part of the measured case against first-class multi-runtime RO, **not** a claim that app policy cannot enforce RO. Linux/macOS OS sandbox remains **未実測・文書ベース**. |
 | **agy** | **FAIL / unsupported** | Every tested combination allowed the marker write. Exit `0` is useless as a policy signal. Advertising RO would be F14. |
 | **Standalone Gemini** | **Unsupported / unverified** | Not installed. Absence of measurement ≠ proof of missing enforcement; it cannot enter the measured support set. |
 
 **Hard rule:** if a runtime’s advertised “read-only” is not enforced by OS or app policy on the target host, it is **unsupported or limited**, never default RO worker. Prompt-only RO remains F14.
 
-**Consistency note (Codex review P1):** Claude and Grok both have working **app-level** RO gates. Claude is the proposed second runtime for product/ops reasons (≤2, Sol-class RO peer, no fail-open OS-sandbox story on Windows). Grok is limited relative to its **sandbox flag** story, not relative to “app policy cannot work.”
+**Consistency note (Codex review P1):** Claude and Grok both have working **app-level** RO gates. Spike analysis briefly treated Claude as a possible second RO peer; the user NO-GO (§4) rejects that path. Grok is limited relative to its **sandbox flag** story, not relative to “app policy cannot work.”
 
 ---
 
 ## 4. Go / no-go
 
-### Recommendation: **CONDITIONAL GO** (narrow)
+**Decision: NO-GO (user, 2026-07-23).** The harness remains a Grok + Codex two-agent orchestra; no multi-runtime adapter. Sections 1–3 record the measured basis.
 
-**Conditional GO for v0.4 as a narrow worker selector — not a general multi-runtime plugin system.**
+### Final decision: **NO-GO**
 
-| Decision | Detail |
-|----------|--------|
-| Runtimes (≤2) | **`codex`** (RO + workspace-write) and **`claude`** (RO roles only, **candidate until acceptance**) |
-| Out of v0.4 | Grok adapter, agy/Gemini stubs, Claude write, dynamic plugin discovery, adapter config languages |
-| Why go (narrow) | Two headless CLIs showed real write blocks on this host; Codex already has most of the five-op shape; second RO peer has product value without claiming full multi-CLI coverage |
-| Why conditional | Claude positive-read + semantic capture not yet proven as an adapter handoff; Codex first-class requires helper-on usable path, not helper-missing fail-closed alone |
-| Why not broader | Grok OS sandbox fail-open on Windows; agy RO broken; more runtimes multiply flag/version matrix |
+Rejected multi-runtime adapter expansion: only Codex currently offers a measured usable OS-level workspace sandbox on this Windows host for both RO and write roles; other CLIs either fail-open on advertised sandbox flags (Grok/agy) or require a second app-policy matrix (Claude) whose full adapter handoff (positive-read + semantic capture) was not completed in the spike. Prefer keeping a single Codex bridge (Grok operator + Codex worker). The ≤2-runtime adapter value is not worth the flag/version matrix or diluting the two-agent contract.
 
-### First-class promotion gate (must pass before calling Claude “first-class”)
+This is a **product/ops ownership call by the user**. The spike analysis below remains as the subordinate evidence record, not as authorization to implement.
 
-Run through the **exact resolved executable**:
+### Analysis (subordinate): conditional GO was possible with `codex` + `claude`
 
-1. Disposable cwd with a unique readable nonce file.
-2. Prompt: read the nonce **and** create a marker file.
-3. Assert: nonce appears in nonempty **semantic** last message; marker **absent**.
-4. Assert: only expected log artifacts outside the disposable cwd.
-5. Record resolved version; re-run after any supported CLI version change.
-6. Treat `exit 0` + existing marker as **failure**.
-7. Treat marker absence without successful read as **failure**.
+Spike analysis (Codex design packet + Operator probes) found that a **narrow** worker selector could have been justified on measurement alone:
 
-Until that gate passes for Claude, language is **“RO candidate”**, not “first-class RO worker.”
+| Analysis point | Detail |
+|----------------|--------|
+| Runtimes (≤2) if go | **`codex`** (RO + workspace-write) and **`claude`** (RO roles only, candidate until acceptance) |
+| Why analysis said conditional GO | Two headless CLIs showed real write blocks; Codex already has most of the five-op shape |
+| Why conditional in analysis | Claude positive-read + semantic capture not proven as adapter handoff; Codex first-class needs helper-on usable path |
+| Why not broader even in analysis | Grok OS sandbox fail-open on Windows; agy RO broken; more runtimes multiply flag/version matrix |
 
-### v0.4 scope sketch (implementation **not** authorized by this spike)
+That analysis is **overridden** by the user NO-GO above. No `delegate-worker.ps1`, no Claude/Grok/agy runtime dispatch, and no v0.4 multi-runtime implement job is authorized by this document.
 
-1. `scripts/delegate-worker.ps1` — shared harness + fixed dispatch `codex|claude`.
-2. One small adapter module with only Codex + Claude mappings (measured flags only).
-3. `scripts/delegate-codex.ps1` — compatibility wrapper to `-Runtime codex`.
-4. Characterization tests for current Codex behavior; adapter tests for Claude RO reject-write + positive-read.
-5. Installer / doctor / active docs only after parity; **no** historical plan rewrites beyond status lines.
+### What stays (two-agent)
 
-### No-go alternative wording (if user overrides to no-go)
+| Role | Runtime | Bridge |
+|------|---------|--------|
+| Operator / default builder / verify | Grok | interactive + this tree’s Operator skills |
+| Designer / reviewer / investigator (default Sol) | Codex | `scripts/delegate-codex.ps1` only |
 
-> Rejected multi-runtime adapter expansion: only Codex currently offers a measured usable OS-level workspace sandbox on this Windows host for both RO and write roles; other CLIs either fail-open on advertised sandbox flags (Grok/agy) or require a second app-policy matrix (Claude) whose full adapter handoff (positive-read + semantic capture) was not completed in the spike. Prefer keeping a single Codex bridge until a second runtime passes the marker+positive-read suite **and** a write-mode suite for implement/fix.
-
-### Final call
-
-**Spike recommendation: CONDITIONAL GO with `codex` + `claude` (Claude RO-only candidate).**  
-**User owns the final v0.4 authorization.** This document alone does not implement the adapter.
+Sections 1–3 remain the permanent rationale for staying two-agent: they show which advertised RO guarantees break on this host and why a multi-runtime adapter would import those breaks into the harness.
 
 ---
 

@@ -80,11 +80,12 @@ README への反映
 
 ## Spike result (2026-07-23)
 
-- **CONDITIONAL GO** — v0.4 candidate: `codex` + `claude` (Claude RO candidate until acceptance). Grok LIMITED, agy FAIL.
+- **NO-GO** (user decision 2026-07-23) — harness stays **Grok + Codex** two-agent only. No multi-runtime adapter.
+- Analysis (subordinate) had allowed conditional GO with codex+claude; user overrode to NO-GO.
 - Design packet: `.agents/docs/packets/plan-007-design.prompt.txt` → `.agents/logs/codex/plan-007-design.last.txt`
 - Review packet: `.agents/docs/packets/plan-007-review.prompt.txt` → `.agents/logs/codex/plan-007-review.last.txt`
 - Empirical: `.agents/docs/packets/plan-007-empirical.md`
-- Deliverable: `docs/adapter-design.md` (P1 review findings folded in)
+- Deliverable: `docs/adapter-design.md` (sections 1–3 kept as measured rationale; §4 = NO-GO)
 
 ## STOP conditions
 
@@ -93,5 +94,6 @@ README への反映
 
 ## Maintenance notes
 
-- go の場合、plan 008(実装)は本 spike の文書を Current state として書けるはず
+- NO-GO: do not open a v0.4 adapter implement plan from this spike. Keep the doc as rejected-direction evidence.
+- Plan 008 is independent (L2 partial-failure recovery) — not an adapter follow-on.
 - CLI のバージョンを対応表に必ず記録する(意味論はバージョンで変わる)
